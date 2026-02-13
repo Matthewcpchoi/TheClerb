@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #FDF6EC;
+  --foreground: #2B2B2B;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
+}
+
+/* Custom scrollbar for warm feel */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F5E6CC;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C49A3B;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #69381A;
+}
+
+/* Book spine vertical text */
+.spine-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+}
+
+/* Spoiler blur */
+.spoiler-blur {
+  filter: blur(8px);
+  user-select: none;
+  transition: filter 0.4s ease;
+}
+
+.spoiler-blur.revealed {
+  filter: blur(0);
+  user-select: auto;
+}
+
+/* Rating slider custom styles */
+input[type="range"].rating-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #C49A3B, #69381A);
+  outline: none;
+}
+
+input[type="range"].rating-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #3C1518;
+  border: 3px solid #C49A3B;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+input[type="range"].rating-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #3C1518;
+  border: 3px solid #C49A3B;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* Shelf wood grain effect */
+.wood-shelf {
+  background: linear-gradient(
+    180deg,
+    #8B5E3C 0%,
+    #A0714B 20%,
+    #8B5E3C 40%,
+    #7A5232 60%,
+    #8B5E3C 80%,
+    #6B3A2A 100%
+  );
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Bookcase side panel */
+.bookcase-side {
+  background: linear-gradient(
+    90deg,
+    #6B3A2A 0%,
+    #8B5E3C 30%,
+    #7A5232 70%,
+    #6B3A2A 100%
+  );
+}
+
+/* Gold shimmer animation */
+@keyframes goldShimmer {
+  0%, 100% { box-shadow: 0 0 10px rgba(196, 154, 59, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(196, 154, 59, 0.6); }
+}
+
+.gold-shimmer {
+  animation: goldShimmer 2s ease-in-out infinite;
+}
+
+/* Book pull-out animation */
+@keyframes pullOut {
+  0% { transform: translateZ(0) rotateY(0); }
+  100% { transform: translateZ(20px) rotateY(-5deg); }
+}
+
+.book-spine:hover {
+  animation: pullOut 0.3s ease forwards;
+}
+
+/* Smooth page transitions */
+.page-transition {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
