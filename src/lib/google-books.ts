@@ -5,7 +5,7 @@ export async function searchBooks(query: string): Promise<GoogleBooksResult[]> {
 
   const encodedQuery = encodeURIComponent(query);
   const res = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?q=${encodedQuery}&maxResults=8`
+    `https://www.googleapis.com/books/v1/volumes?q=${encodedQuery}&maxResults=8&key=${process.env.NEXT_PUBLIC_GOOGLE_BOOKS_KEY}`
   );
 
   if (!res.ok) return [];
