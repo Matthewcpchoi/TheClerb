@@ -45,6 +45,7 @@ CREATE TABLE books (
   thumbnail_url text,
   spine_color text,
   google_books_id text,
+  total_pages integer,
   status text CHECK (status IN ('reading', 'completed', 'upcoming')) DEFAULT 'upcoming',
   added_by uuid REFERENCES members(id),
   created_at timestamptz DEFAULT now()
