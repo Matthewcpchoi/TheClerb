@@ -97,97 +97,104 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Currently Reading */}
-      {currentBook && (
-        <Link href={`/book/${currentBook.id}`}>
-          <div className="bg-white/50 rounded-xl border border-cream-dark p-8 mb-8 hover:shadow-lg transition-shadow cursor-pointer">
-            <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-widest mb-4">
-              Currently Reading
-            </p>
-            <div className="flex items-start gap-6">
-              {(currentBook.cover_url || currentBook.thumbnail_url) && (
-                <img
-                  src={currentBook.cover_url || currentBook.thumbnail_url || ""}
-                  alt={currentBook.title}
-                  className="w-28 h-40 object-cover rounded-lg shadow-lg flex-shrink-0"
-                  referrerPolicy="no-referrer"
-                />
-              )}
-              <div>
-                <h2 className="font-serif text-2xl text-charcoal mb-1">
-                  {currentBook.title}
-                </h2>
-                {currentBook.author && (
-                  <p className="font-sans text-warm-brown">
-                    {currentBook.author}
-                  </p>
+      {/* Currently Reading + Next Club — side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {/* Currently Reading */}
+        {currentBook ? (
+          <Link href={`/book/${currentBook.id}`} className="block h-full">
+            <div className="bg-white/50 rounded-xl border border-cream-dark p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+              <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-widest mb-4">
+                Currently Reading
+              </p>
+              <div className="flex items-start gap-4 flex-1">
+                {(currentBook.cover_url || currentBook.thumbnail_url) && (
+                  <img
+                    src={currentBook.cover_url || currentBook.thumbnail_url || ""}
+                    alt={currentBook.title}
+                    className="w-20 h-28 object-cover rounded-lg shadow-lg flex-shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
                 )}
-                {currentBook.page_count && (
-                  <p className="font-sans text-sm text-warm-brown/50 mt-1">
-                    {currentBook.page_count} pages
-                  </p>
-                )}
+                <div className="min-w-0">
+                  <h2 className="font-serif text-xl text-charcoal mb-1 leading-tight">
+                    {currentBook.title}
+                  </h2>
+                  {currentBook.author && (
+                    <p className="font-sans text-sm text-warm-brown">
+                      {currentBook.author}
+                    </p>
+                  )}
+                  {currentBook.page_count && (
+                    <p className="font-sans text-xs text-warm-brown/50 mt-1">
+                      {currentBook.page_count} pages
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </Link>
-      )}
-
-      {!currentBook && (
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-8 mb-8 text-center">
-          <p className="font-sans text-warm-brown/60 italic">
-            No book currently being read.
-          </p>
-          <Link
-            href="/shelf"
-            className="inline-block mt-3 px-5 py-2 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
-          >
-            Visit The Shelf
           </Link>
-        </div>
-      )}
-
-      {/* Next Club Meeting */}
-      {nextMeeting && (
-        <Link href="/calendar">
-          <div className="bg-white/50 rounded-xl border border-gold/30 p-6 mb-8 hover:shadow-lg transition-shadow cursor-pointer">
-            <div className="flex items-start gap-5">
-              <div className="flex-shrink-0 w-14 h-14 bg-gold/15 rounded-lg flex flex-col items-center justify-center">
-                <span className="font-serif text-lg text-gold font-bold leading-none">
-                  {new Date(nextMeeting.date + "T00:00:00").getDate()}
-                </span>
-                <span className="font-sans text-[10px] text-gold/70 uppercase">
-                  {new Date(nextMeeting.date + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-sans text-xs text-gold uppercase tracking-widest mb-1">
-                  Next Club
-                </p>
-                <h3 className="font-serif text-lg text-charcoal truncate">
-                  {nextMeeting.title}
-                </h3>
-                <p className="font-sans text-sm text-warm-brown/70 mt-0.5">
-                  {formatDate(nextMeeting.date)} at {formatTime(nextMeeting.time)}
-                </p>
-                {nextMeeting.location && (
-                  <p className="font-sans text-sm text-warm-brown/50 mt-0.5">
-                    {nextMeeting.location}
-                  </p>
-                )}
-              </div>
-              {nextMeeting.book && (nextMeeting.book.cover_url || nextMeeting.book.thumbnail_url) && (
-                <img
-                  src={nextMeeting.book.cover_url || nextMeeting.book.thumbnail_url || ""}
-                  alt={nextMeeting.book.title}
-                  className="w-12 h-16 object-cover rounded shadow-sm flex-shrink-0"
-                  referrerPolicy="no-referrer"
-                />
-              )}
-            </div>
+        ) : (
+          <div className="bg-white/50 rounded-xl border border-cream-dark p-6 flex flex-col items-center justify-center h-full">
+            <p className="font-sans text-warm-brown/60 italic mb-3">
+              No book currently being read.
+            </p>
+            <Link
+              href="/shelf"
+              className="px-5 py-2 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
+            >
+              Visit The Shelf
+            </Link>
           </div>
-        </Link>
-      )}
+        )}
+
+        {/* Next Club Meeting */}
+        {nextMeeting ? (
+          <Link href="/calendar" className="block h-full">
+            <div className="bg-white/50 rounded-xl border border-gold/30 p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+              <p className="font-sans text-xs text-gold uppercase tracking-widest mb-4">
+                Next Club
+              </p>
+              <div className="flex items-start gap-4 flex-1">
+                <div className="flex-shrink-0 w-14 h-14 bg-gold/15 rounded-lg flex flex-col items-center justify-center">
+                  <span className="font-serif text-lg text-gold font-bold leading-none">
+                    {new Date(nextMeeting.date + "T00:00:00").getDate()}
+                  </span>
+                  <span className="font-sans text-[10px] text-gold/70 uppercase">
+                    {new Date(nextMeeting.date + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-serif text-lg text-charcoal leading-tight">
+                    {nextMeeting.title}
+                  </h3>
+                  <p className="font-sans text-sm text-warm-brown/70 mt-1">
+                    {formatDate(nextMeeting.date)}
+                  </p>
+                  <p className="font-sans text-sm text-warm-brown/70">
+                    {formatTime(nextMeeting.time)}
+                  </p>
+                  {nextMeeting.location && (
+                    <p className="font-sans text-sm text-warm-brown/50 mt-0.5">
+                      {nextMeeting.location}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Link>
+        ) : (
+          <Link href="/calendar" className="block h-full">
+            <div className="bg-white/50 rounded-xl border border-cream-dark p-6 flex flex-col items-center justify-center h-full hover:shadow-lg transition-shadow cursor-pointer">
+              <p className="font-sans text-warm-brown/60 italic mb-3">
+                No upcoming meetings.
+              </p>
+              <span className="px-5 py-2 rounded-lg bg-gold/20 text-gold font-sans text-sm">
+                Schedule One
+              </span>
+            </div>
+          </Link>
+        )}
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

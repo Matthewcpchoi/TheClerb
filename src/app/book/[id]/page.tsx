@@ -237,6 +237,38 @@ export default function BookDetailPage() {
                   ? "Completed"
                   : "Upcoming"}
             </span>
+            {currentMember && book.status === "completed" && (
+              <button
+                onClick={async () => {
+                  await supabase
+                    .from("books")
+                    .update({ status: "completed" })
+                    .eq("status", "reading");
+                  await supabase
+                    .from("books")
+                    .update({ status: "reading" })
+                    .eq("id", bookId);
+                  fetchBook();
+                }}
+                className="px-3 py-1 rounded text-xs font-sans bg-sage/20 text-sage hover:bg-sage/30 transition-colors"
+              >
+                Read Again
+              </button>
+            )}
+            {currentMember && book.status === "reading" && (
+              <button
+                onClick={async () => {
+                  await supabase
+                    .from("books")
+                    .update({ status: "completed" })
+                    .eq("id", bookId);
+                  fetchBook();
+                }}
+                className="px-3 py-1 rounded text-xs font-sans border border-sage text-sage hover:bg-sage hover:text-cream transition-colors"
+              >
+                Mark Completed
+              </button>
+            )}
           </div>
           <h1 className="font-serif text-3xl md:text-4xl text-charcoal mb-2">
             {book.title}
