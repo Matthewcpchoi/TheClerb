@@ -67,21 +67,35 @@ export default function BookSearch({
       }
     }
 
-    const { data, error } = await supabase
+    const bookData: Record<string, unknown> = {
+      title: result.volumeInfo.title,
+      author: result.volumeInfo.authors?.join(", ") || null,
+      cover_url: coverUrl,
+      thumbnail_url: thumbnailUrl,
+      spine_color: spineColor,
+      google_books_id: result.id,
+      status: "upcoming",
+      added_by: memberId,
+    };
+    if (result.volumeInfo.pageCount) {
+      bookData.page_count = result.volumeInfo.pageCount;
+    }
+
+    let { data, error } = await supabase
       .from("books")
-      .insert({
-        title: result.volumeInfo.title,
-        author: result.volumeInfo.authors?.join(", ") || null,
-        cover_url: coverUrl,
-        thumbnail_url: thumbnailUrl,
-        spine_color: spineColor,
-        google_books_id: result.id,
-        status: "upcoming",
-        page_count: result.volumeInfo.pageCount || null,
-        added_by: memberId,
-      })
+      .insert(bookData)
       .select()
       .single();
+
+    // If page_count column doesn't exist, retry without it
+    if (error && bookData.page_count) {
+      delete bookData.page_count;
+      ({ data, error } = await supabase
+        .from("books")
+        .insert(bookData)
+        .select()
+        .single());
+    }
 
     if (data && !error) {
       onBookAdded(data);
