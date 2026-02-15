@@ -12,15 +12,11 @@ interface BookShelfProps {
 }
 
 function WoodShelf() {
-  return (
-    <div className="wood-shelf h-4 rounded-sm relative">
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/10" />
-    </div>
-  );
+  return <div className="wood-shelf rounded-sm" />;
 }
 
 function BookcaseSide() {
-  return <div className="bookcase-side w-4 flex-shrink-0 rounded-sm" />;
+  return <div className="bookcase-side rounded-sm" />;
 }
 
 export default function BookShelf({
@@ -32,13 +28,14 @@ export default function BookShelf({
   return (
     <div className="max-w-4xl mx-auto">
       {/* Bookcase frame */}
-      <div className="bg-wood-dark/10 rounded-lg p-1">
+      <div className="rounded-lg overflow-hidden shadow-xl">
+        <div className="bookcase-top rounded-t-lg" />
         <div className="flex">
           <BookcaseSide />
 
           <div className="flex-1 space-y-0">
             {/* Tier 1: Currently Reading — Featured Display */}
-            <div className="bg-cream-dark/40 px-4 pt-6 pb-2 min-h-[280px] flex items-end justify-center">
+            <div className="shelf-back px-4 pt-6 pb-2 min-h-[280px] flex items-end justify-center">
               {currentBook ? (
                 <div className="flex items-end gap-6 mb-2">
                   <Link href={`/book/${currentBook.id}`}>
@@ -118,7 +115,7 @@ export default function BookShelf({
               const tier3 = completedBooks.slice(midpoint);
               return (
                 <>
-                  <div className="bg-cream-dark/20 px-4 pt-4 pb-2 min-h-[260px]">
+                  <div className="shelf-back px-4 pt-4 pb-2 min-h-[260px]">
                     {tier2.length > 0 ? (
                       <>
                         <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-wider mb-3">
@@ -142,7 +139,7 @@ export default function BookShelf({
 
                   {tier3.length > 0 && (
                     <>
-                      <div className="bg-cream-dark/20 px-4 pt-4 pb-2 min-h-[260px]">
+                      <div className="shelf-back px-4 pt-4 pb-2 min-h-[260px]">
                         <div className="flex items-end gap-[3px] overflow-x-auto pb-2 scrollbar-hide">
                           {tier3.map((book, i) => (
                             <BookSpine
@@ -161,7 +158,7 @@ export default function BookShelf({
             })()}
 
             {/* Tier 4: Hall of Fame & Hall of Shame */}
-            <div className="bg-cream-dark/30 px-4 pt-4 pb-2 min-h-[240px]">
+            <div className="shelf-back px-4 pt-4 pb-2 min-h-[240px]">
               <div className="flex items-end">
                 {/* Hall of Fame */}
                 <div className="flex-1 flex flex-col items-center">
