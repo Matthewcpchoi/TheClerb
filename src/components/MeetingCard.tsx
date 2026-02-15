@@ -43,6 +43,7 @@ export default function MeetingCard({
               src={meeting.book!.cover_url || meeting.book!.thumbnail_url || ""}
               alt={meeting.book!.title}
               className="w-24 h-full object-cover min-h-[140px]"
+              referrerPolicy="no-referrer"
             />
           </Link>
         )}

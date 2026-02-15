@@ -7,6 +7,7 @@ interface RatingSliderProps {
   initialValue?: number;
   onSubmit: (value: number) => void;
   disabled?: boolean;
+  submitLabel?: string;
 }
 
 export default function RatingSlider({
@@ -14,25 +15,9 @@ export default function RatingSlider({
   initialValue,
   onSubmit,
   disabled,
+  submitLabel = "Submit Rating",
 }: RatingSliderProps) {
   const [value, setValue] = useState(initialValue ?? 5);
-  const [submitted, setSubmitted] = useState(initialValue !== undefined);
-
-  function handleSubmit() {
-    onSubmit(value);
-    setSubmitted(true);
-  }
-
-  if (submitted && initialValue !== undefined) {
-    return (
-      <div className="flex items-center gap-3">
-        <span className="font-sans text-sm text-warm-brown">{label}:</span>
-        <span className="font-serif text-xl text-mahogany font-bold">
-          {initialValue.toFixed(2)}
-        </span>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-3">
@@ -58,11 +43,11 @@ export default function RatingSlider({
         <span>10</span>
       </div>
       <button
-        onClick={handleSubmit}
+        onClick={() => onSubmit(value)}
         disabled={disabled}
         className="w-full py-2.5 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors disabled:opacity-50"
       >
-        Submit Rating
+        {submitLabel}
       </button>
     </div>
   );

@@ -2,15 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Book } from "@/types";
+import { Book, Meeting } from "@/types";
+import { formatDate, formatTime } from "@/lib/utils";
 import Link from "next/link";
 
 export default function Home() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
+  const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalMembers: 0,
-    lastAvgRating: null as number | null,
+    avgRating: null as number | null,
+    totalPages: 0,
   });
 
   useEffect(() => {
@@ -27,6 +30,17 @@ export default function Home() {
       .single();
     if (reading) setCurrentBook(reading);
 
+    // Fetch next upcoming meeting
+    const now = new Date().toISOString().split("T")[0];
+    const { data: meetings } = await supabase
+      .from("meetings")
+      .select("*, book:books(*)")
+      .gte("date", now)
+      .order("date", { ascending: true })
+      .order("time", { ascending: true })
+      .limit(1);
+    if (meetings && meetings.length > 0) setNextMeeting(meetings[0]);
+
     // Fetch stats
     const { count: bookCount } = await supabase
       .from("books")
@@ -37,36 +51,37 @@ export default function Home() {
       .from("members")
       .select("*", { count: "exact", head: true });
 
-    // Get last completed book's avg rating
-    const { data: lastBook } = await supabase
+    // Total pages across all books (completed + reading)
+    const { data: allBooks } = await supabase
       .from("books")
-      .select("id")
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
+      .select("page_count")
+      .in("status", ["completed", "reading"]);
 
-    let lastAvg: number | null = null;
-    if (lastBook) {
-      const { data: ratings } = await supabase
-        .from("ratings")
-        .select("post_rating, pre_rating")
-        .eq("book_id", lastBook.id)
-        .eq("is_visible", true);
-      if (ratings && ratings.length > 0) {
-        const vals = ratings
-          .map((r) => r.post_rating ?? r.pre_rating)
-          .filter((v): v is number => v !== null);
-        if (vals.length > 0) {
-          lastAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
-        }
+    const totalPages = allBooks
+      ? allBooks.reduce((sum, b) => sum + (b.page_count || 0), 0)
+      : 0;
+
+    // Avg rating across ALL visible ratings
+    const { data: allRatings } = await supabase
+      .from("ratings")
+      .select("pre_rating, post_rating")
+      .eq("is_visible", true);
+
+    let avgRating: number | null = null;
+    if (allRatings && allRatings.length > 0) {
+      const vals = allRatings
+        .map((r) => r.post_rating ?? r.pre_rating)
+        .filter((v): v is number => v !== null);
+      if (vals.length > 0) {
+        avgRating = vals.reduce((a, b) => a + b, 0) / vals.length;
       }
     }
 
     setStats({
       totalBooks: bookCount || 0,
       totalMembers: memberCount || 0,
-      lastAvgRating: lastAvg,
+      avgRating,
+      totalPages,
     });
   }
 
@@ -95,6 +110,7 @@ export default function Home() {
                   src={currentBook.cover_url || currentBook.thumbnail_url || ""}
                   alt={currentBook.title}
                   className="w-28 h-40 object-cover rounded-lg shadow-lg flex-shrink-0"
+                  referrerPolicy="no-referrer"
                 />
               )}
               <div>
@@ -104,6 +120,11 @@ export default function Home() {
                 {currentBook.author && (
                   <p className="font-sans text-warm-brown">
                     {currentBook.author}
+                  </p>
+                )}
+                {currentBook.page_count && (
+                  <p className="font-sans text-sm text-warm-brown/50 mt-1">
+                    {currentBook.page_count} pages
                   </p>
                 )}
               </div>
@@ -126,8 +147,50 @@ export default function Home() {
         </div>
       )}
 
+      {/* Next Club Meeting */}
+      {nextMeeting && (
+        <Link href="/calendar">
+          <div className="bg-white/50 rounded-xl border border-gold/30 p-6 mb-8 hover:shadow-lg transition-shadow cursor-pointer">
+            <div className="flex items-start gap-5">
+              <div className="flex-shrink-0 w-14 h-14 bg-gold/15 rounded-lg flex flex-col items-center justify-center">
+                <span className="font-serif text-lg text-gold font-bold leading-none">
+                  {new Date(nextMeeting.date + "T00:00:00").getDate()}
+                </span>
+                <span className="font-sans text-[10px] text-gold/70 uppercase">
+                  {new Date(nextMeeting.date + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-sans text-xs text-gold uppercase tracking-widest mb-1">
+                  Next Club
+                </p>
+                <h3 className="font-serif text-lg text-charcoal truncate">
+                  {nextMeeting.title}
+                </h3>
+                <p className="font-sans text-sm text-warm-brown/70 mt-0.5">
+                  {formatDate(nextMeeting.date)} at {formatTime(nextMeeting.time)}
+                </p>
+                {nextMeeting.location && (
+                  <p className="font-sans text-sm text-warm-brown/50 mt-0.5">
+                    {nextMeeting.location}
+                  </p>
+                )}
+              </div>
+              {nextMeeting.book && (nextMeeting.book.cover_url || nextMeeting.book.thumbnail_url) && (
+                <img
+                  src={nextMeeting.book.cover_url || nextMeeting.book.thumbnail_url || ""}
+                  alt={nextMeeting.book.title}
+                  className="w-12 h-16 object-cover rounded shadow-sm flex-shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+            </div>
+          </div>
+        </Link>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">
             {stats.totalBooks}
@@ -144,12 +207,20 @@ export default function Home() {
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-gold font-bold">
-            {stats.lastAvgRating !== null
-              ? stats.lastAvgRating.toFixed(1)
-              : "—"}
+            {stats.avgRating !== null
+              ? stats.avgRating.toFixed(1)
+              : "\u2014"}
           </p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Last Avg Rating
+            Avg Rating
+          </p>
+        </div>
+        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
+          <p className="font-serif text-3xl text-mahogany font-bold">
+            {stats.totalPages > 0 ? stats.totalPages.toLocaleString() : "\u2014"}
+          </p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">
+            Total Pages
           </p>
         </div>
       </div>

@@ -15,6 +15,8 @@ export interface Book {
   description?: string | null;
   status: "reading" | "completed" | "upcoming";
   added_by: string | null;
+  page_count: number | null;
+  completed_at: string | null;
   created_at: string;
 }
 
@@ -67,6 +69,7 @@ export interface GoogleBooksResult {
     title: string;
     authors?: string[];
     description?: string;
+    pageCount?: number;
     imageLinks?: {
       thumbnail?: string;
       smallThumbnail?: string;

@@ -226,6 +226,7 @@ export default function CalendarPage() {
                     src={selectedBook.cover_url || selectedBook.thumbnail_url || ""}
                     alt={selectedBook.title}
                     className="w-14 h-20 object-cover rounded shadow-md flex-shrink-0"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className="w-14 h-20 bg-cream-dark rounded flex items-center justify-center flex-shrink-0">

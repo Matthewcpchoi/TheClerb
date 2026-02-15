@@ -77,6 +77,7 @@ export default function BookSearch({
         spine_color: spineColor,
         google_books_id: result.id,
         status: "upcoming",
+        page_count: result.volumeInfo.pageCount || null,
         added_by: memberId,
       })
       .select()
@@ -154,6 +155,7 @@ export default function BookSearch({
                       )}
                       alt={result.volumeInfo.title}
                       className="w-12 h-18 object-cover rounded shadow flex-shrink-0"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <div className="w-12 h-16 bg-mahogany/20 rounded flex-shrink-0 flex items-center justify-center">

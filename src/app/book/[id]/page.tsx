@@ -19,8 +19,11 @@ export default function BookDetailPage() {
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [topics, setTopics] = useState<DiscussionTopic[]>([]);
   const [myRating, setMyRating] = useState<Rating | null>(null);
+  const [editingPre, setEditingPre] = useState(false);
   const [showPostRating, setShowPostRating] = useState(false);
+  const [editingPost, setEditingPost] = useState(false);
   const [postReason, setPostReason] = useState("");
+  const [pendingPostValue, setPendingPostValue] = useState<number | null>(null);
   const [description, setDescription] = useState("");
 
   const fetchBook = useCallback(async () => {
@@ -31,7 +34,6 @@ export default function BookDetailPage() {
       .single();
     if (data) {
       setBook(data);
-      // Fetch description from Google Books if we have the ID
       if (data.google_books_id) {
         try {
           const res = await fetch(
@@ -77,7 +79,6 @@ export default function BookDetailPage() {
     fetchTopics();
   }, [fetchBook, fetchRatings, fetchTopics]);
 
-  // Real-time subscription for ratings
   useEffect(() => {
     const channel = supabase
       .channel(`ratings-${bookId}`)
@@ -119,6 +120,7 @@ export default function BookDetailPage() {
 
     if (data) {
       setMyRating(data);
+      setEditingPre(false);
       fetchRatings();
     }
   }
@@ -126,17 +128,30 @@ export default function BookDetailPage() {
   async function handlePostRating(value: number) {
     if (!currentMember || !myRating) return;
 
+    const preVal = myRating.pre_rating ?? 5;
+    const changed = Math.abs(value - preVal) > 0.05;
+
+    if (changed && !pendingPostValue) {
+      // Score changed from pre — ask for reason before saving
+      setPendingPostValue(value);
+      return;
+    }
+
+    const reason = changed ? postReason || null : null;
+
     await supabase
       .from("ratings")
       .update({
-        post_rating: value,
-        rating_change_reason: postReason || null,
+        post_rating: pendingPostValue ?? value,
+        rating_change_reason: reason,
         updated_at: new Date().toISOString(),
       })
       .eq("id", myRating.id);
 
     setShowPostRating(false);
+    setEditingPost(false);
     setPostReason("");
+    setPendingPostValue(null);
     fetchRatings();
   }
 
@@ -169,6 +184,9 @@ export default function BookDetailPage() {
     );
   }
 
+  const hasPreRating = myRating && myRating.pre_rating !== null;
+  const hasPostRating = myRating && myRating.post_rating !== null;
+
   return (
     <div className="max-w-3xl mx-auto">
       {/* Back link */}
@@ -199,6 +217,7 @@ export default function BookDetailPage() {
             src={book.cover_url || book.thumbnail_url || ""}
             alt={book.title}
             className="w-48 h-72 object-cover rounded-lg shadow-xl flex-shrink-0"
+            referrerPolicy="no-referrer"
           />
         )}
         <div className="flex-1">
@@ -223,10 +242,18 @@ export default function BookDetailPage() {
             {book.title}
           </h1>
           {book.author && (
-            <p className="font-sans text-lg text-warm-brown mb-4">
+            <p className="font-sans text-lg text-warm-brown mb-2">
               {book.author}
             </p>
           )}
+          <div className="flex items-center gap-4 text-sm font-sans text-warm-brown/60 mb-4">
+            {book.page_count && (
+              <span>{book.page_count} pages</span>
+            )}
+            {book.completed_at && (
+              <span>Read {new Date(book.completed_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</span>
+            )}
+          </div>
           {description && (
             <div
               className="font-sans text-sm text-charcoal/70 leading-relaxed line-clamp-6"
@@ -240,8 +267,8 @@ export default function BookDetailPage() {
       <div className="bg-white/50 rounded-xl border border-cream-dark p-6 mb-6">
         <h2 className="font-serif text-xl text-charcoal mb-6">Ratings</h2>
 
-        {/* My rating */}
-        {currentMember && !myRating && (
+        {/* No rating yet — show pre-club slider */}
+        {currentMember && !hasPreRating && (
           <div className="mb-6 p-4 rounded-lg bg-cream-dark/30">
             <RatingSlider
               label="Your Pre-Club Rating"
@@ -250,83 +277,202 @@ export default function BookDetailPage() {
           </div>
         )}
 
-        {currentMember && myRating && !myRating.post_rating && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-cream-dark/30 mb-3">
+        {/* Has pre-rating — show value with edit */}
+        {currentMember && hasPreRating && !editingPre && (
+          <div className="mb-6 p-3 rounded-lg bg-cream-dark/30">
+            <div className="flex items-center justify-between">
               <div>
                 <p className="font-sans text-xs text-warm-brown/60">
                   Your Pre-Club Rating
                 </p>
                 <p className="font-serif text-xl text-mahogany font-bold">
-                  {myRating.pre_rating?.toFixed(2)}
+                  {myRating!.pre_rating?.toFixed(2)}
                 </p>
               </div>
-              <button
-                onClick={() =>
-                  handleToggleVisibility(myRating.id, !myRating.is_visible)
-                }
-                className={`px-3 py-1.5 rounded text-xs font-sans transition-colors ${
-                  myRating.is_visible
-                    ? "bg-sage/20 text-sage"
-                    : "bg-gold/20 text-gold"
-                }`}
-              >
-                {myRating.is_visible
-                  ? "Rating Visible"
-                  : "Make Rating Visible"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setEditingPre(true)}
+                  className="p-1.5 rounded-lg hover:bg-cream-dark/60 transition-colors text-warm-brown/50 hover:text-warm-brown"
+                  title="Edit rating"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() =>
+                    handleToggleVisibility(myRating!.id, !myRating!.is_visible)
+                  }
+                  className={`px-3 py-1.5 rounded text-xs font-sans transition-colors ${
+                    myRating!.is_visible
+                      ? "bg-sage/20 text-sage"
+                      : "bg-gold/20 text-gold"
+                  }`}
+                >
+                  {myRating!.is_visible
+                    ? "Rating Visible"
+                    : "Make Rating Visible"}
+                </button>
+              </div>
             </div>
+          </div>
+        )}
 
-            {book.status === "completed" && (
-              <>
-                {!showPostRating ? (
-                  <button
-                    onClick={() => setShowPostRating(true)}
-                    className="w-full py-2.5 rounded-lg border border-gold text-gold font-sans text-sm hover:bg-gold/10 transition-colors"
-                  >
-                    Add Post-Club Rating
-                  </button>
+        {/* Editing pre-rating */}
+        {currentMember && editingPre && (
+          <div className="mb-6 p-4 rounded-lg bg-cream-dark/30">
+            <RatingSlider
+              label="Edit Pre-Club Rating"
+              initialValue={myRating?.pre_rating ?? 5}
+              onSubmit={handlePreRating}
+              submitLabel="Save Rating"
+            />
+            <button
+              onClick={() => setEditingPre(false)}
+              className="w-full mt-2 py-2 rounded-lg border border-cream-dark text-warm-brown font-sans text-sm hover:bg-cream-dark/30 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Post-club: "Change your score?" button (only after book completed, has pre, no post yet) */}
+        {currentMember && hasPreRating && !hasPostRating && !editingPre && book.status === "completed" && (
+          <>
+            {!showPostRating ? (
+              <button
+                onClick={() => setShowPostRating(true)}
+                className="w-full mb-6 py-2.5 rounded-lg border border-gold text-gold font-sans text-sm hover:bg-gold/10 transition-colors"
+              >
+                Change your score?
+              </button>
+            ) : (
+              <div className="mb-6 p-4 rounded-lg bg-cream-dark/30 space-y-4">
+                {!pendingPostValue ? (
+                  <RatingSlider
+                    label="Your Post-Club Rating"
+                    initialValue={myRating!.pre_rating ?? 5}
+                    onSubmit={handlePostRating}
+                    submitLabel="Submit"
+                  />
                 ) : (
-                  <div className="p-4 rounded-lg bg-cream-dark/30 space-y-4">
-                    <RatingSlider
-                      label="Your Post-Club Rating"
-                      onSubmit={handlePostRating}
-                    />
+                  <>
+                    <div className="text-center">
+                      <p className="font-sans text-sm text-warm-brown mb-1">Your new score</p>
+                      <p className="font-serif text-2xl text-gold font-bold">{pendingPostValue.toFixed(2)}</p>
+                      <p className="font-sans text-xs text-warm-brown/60 mt-1">
+                        Changed from {myRating!.pre_rating?.toFixed(2)}
+                      </p>
+                    </div>
                     <textarea
                       value={postReason}
                       onChange={(e) => setPostReason(e.target.value)}
-                      placeholder="What changed your mind? (optional)"
+                      placeholder="What changed your mind?"
                       className="w-full px-4 py-2 rounded-lg border border-cream-dark bg-white font-sans text-sm text-charcoal placeholder:text-warm-brown/50 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold resize-none"
                       rows={2}
+                      autoFocus
                     />
-                  </div>
+                    <button
+                      onClick={() => handlePostRating(pendingPostValue)}
+                      className="w-full py-2.5 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
+                    >
+                      Save
+                    </button>
+                  </>
                 )}
-              </>
+                <button
+                  onClick={() => {
+                    setShowPostRating(false);
+                    setPendingPostValue(null);
+                    setPostReason("");
+                  }}
+                  className="w-full py-2 rounded-lg border border-cream-dark text-warm-brown font-sans text-sm hover:bg-cream-dark/30 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Has both pre and post — show both with edit */}
+        {currentMember && hasPostRating && !editingPost && (
+          <div className="mb-6 p-3 rounded-lg bg-cream-dark/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="font-sans text-xs text-warm-brown/60">Pre</p>
+                  <p className="font-serif text-xl text-mahogany font-bold">
+                    {myRating!.pre_rating?.toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-sans text-xs text-warm-brown/60">Post</p>
+                  <p className="font-serif text-xl text-gold font-bold">
+                    {myRating!.post_rating?.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingPost(true)}
+                className="p-1.5 rounded-lg hover:bg-cream-dark/60 transition-colors text-warm-brown/50 hover:text-warm-brown"
+                title="Edit post rating"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            </div>
+            {myRating!.rating_change_reason && (
+              <p className="font-sans text-sm text-charcoal/70 mt-2 italic">
+                &ldquo;{myRating!.rating_change_reason}&rdquo;
+              </p>
             )}
           </div>
         )}
 
-        {currentMember && myRating && myRating.post_rating !== null && (
-          <div className="mb-6 p-3 rounded-lg bg-cream-dark/30">
-            <div className="flex items-center gap-6">
-              <div>
-                <p className="font-sans text-xs text-warm-brown/60">Pre</p>
-                <p className="font-serif text-xl text-mahogany font-bold">
-                  {myRating.pre_rating?.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <p className="font-sans text-xs text-warm-brown/60">Post</p>
-                <p className="font-serif text-xl text-gold font-bold">
-                  {myRating.post_rating?.toFixed(2)}
-                </p>
-              </div>
-            </div>
-            {myRating.rating_change_reason && (
-              <p className="font-sans text-sm text-charcoal/70 mt-2 italic">
-                &ldquo;{myRating.rating_change_reason}&rdquo;
-              </p>
+        {/* Editing post-rating */}
+        {currentMember && editingPost && (
+          <div className="mb-6 p-4 rounded-lg bg-cream-dark/30 space-y-4">
+            {!pendingPostValue ? (
+              <RatingSlider
+                label="Edit Post-Club Rating"
+                initialValue={myRating?.post_rating ?? myRating?.pre_rating ?? 5}
+                onSubmit={handlePostRating}
+                submitLabel="Save Rating"
+              />
+            ) : (
+              <>
+                <div className="text-center">
+                  <p className="font-sans text-sm text-warm-brown mb-1">Your new score</p>
+                  <p className="font-serif text-2xl text-gold font-bold">{pendingPostValue.toFixed(2)}</p>
+                </div>
+                <textarea
+                  value={postReason}
+                  onChange={(e) => setPostReason(e.target.value)}
+                  placeholder="What changed your mind?"
+                  className="w-full px-4 py-2 rounded-lg border border-cream-dark bg-white font-sans text-sm text-charcoal placeholder:text-warm-brown/50 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold resize-none"
+                  rows={2}
+                  autoFocus
+                />
+                <button
+                  onClick={() => handlePostRating(pendingPostValue)}
+                  className="w-full py-2.5 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
+                >
+                  Save
+                </button>
+              </>
             )}
+            <button
+              onClick={() => {
+                setEditingPost(false);
+                setPendingPostValue(null);
+                setPostReason("");
+              }}
+              className="w-full py-2 rounded-lg border border-cream-dark text-warm-brown font-sans text-sm hover:bg-cream-dark/30 transition-colors"
+            >
+              Cancel
+            </button>
           </div>
         )}
 

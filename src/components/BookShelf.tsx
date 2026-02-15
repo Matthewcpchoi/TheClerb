@@ -55,6 +55,7 @@ export default function BookShelf({
                           }
                           alt={currentBook.title}
                           className="w-36 h-52 object-cover rounded shadow-xl"
+                          referrerPolicy="no-referrer"
                         />
                       ) : (
                         <div className="w-36 h-52 bg-mahogany rounded shadow-xl flex items-center justify-center p-4">
@@ -175,6 +176,7 @@ export default function BookShelf({
                               }
                               alt={hallOfFame.title}
                               className="w-24 h-36 object-cover rounded shadow-lg"
+                              referrerPolicy="no-referrer"
                             />
                           ) : (
                             <div className="w-24 h-36 bg-mahogany rounded shadow-lg flex items-center justify-center p-2">
@@ -223,6 +225,7 @@ export default function BookShelf({
                               style={{
                                 filter: "saturate(0.5) brightness(0.85)",
                               }}
+                              referrerPolicy="no-referrer"
                             />
                           ) : (
                             <div
