@@ -212,12 +212,8 @@ input[type="range"].rating-slider::-moz-range-thumb {
 /* Shelf back wall — slightly darker to create depth */
 .shelf-back {
   background:
-    linear-gradient(
-      180deg,
-      rgba(90, 61, 34, 0.12) 0%,
-      rgba(75, 50, 28, 0.08) 50%,
-      rgba(90, 61, 34, 0.15) 100%
-    );
+    linear-gradient(160deg, rgba(125, 76, 43, 0.32) 0%, rgba(86, 52, 31, 0.48) 50%, rgba(66, 40, 24, 0.62) 100%),
+    linear-gradient(180deg, #5f3a22 0%, #4f301b 100%);
   position: relative;
 }
 
@@ -273,4 +269,52 @@ input[type="range"].rating-slider::-moz-range-thumb {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 430px) {
+  .bookcase-side {
+    width: 8px;
+  }
+
+  .wood-shelf {
+    height: 16px;
+  }
+
+  .shelf-back {
+    min-height: 220px;
+  }
+}
+
+
+.bookcase-frame {
+  background: linear-gradient(180deg, #6b4226 0%, #4c2f1a 100%);
+  border: 1px solid rgba(40, 20, 10, 0.4);
+}
+
+.shelf-spotlight {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 78px;
+  height: 10px;
+  border-radius: 999px;
+  background: radial-gradient(ellipse at center, rgba(255, 244, 209, 0.95) 0%, rgba(255, 235, 180, 0.6) 40%, rgba(255, 235, 180, 0) 100%);
+  filter: blur(0.4px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.book-tile {
+  scroll-snap-align: start;
 }

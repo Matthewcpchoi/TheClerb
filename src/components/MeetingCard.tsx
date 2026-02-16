@@ -40,7 +40,7 @@ export default function MeetingCard({
             className="w-24 min-h-[170px] flex-shrink-0 bg-cream-dark/30 flex items-center justify-center p-2"
           >
             <img
-              src={meeting.book!.cover_url || meeting.book!.thumbnail_url || ""}
+              src={meeting.book!.thumbnail_url || meeting.book!.cover_url || ""}
               alt={meeting.book!.title}
               className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
@@ -84,8 +84,6 @@ export default function MeetingCard({
               )}
             </div>
           </div>
-        </Link>
-      )}
 
           {meeting.book && !hasBookCover && (
             <Link
@@ -98,13 +96,17 @@ export default function MeetingCard({
 
           {meeting.location && <p className="font-sans text-sm text-warm-brown/70 mb-2">Location: {meeting.location}</p>}
 
-          {meeting.notes && <p className="font-sans text-sm text-charcoal/70 mb-4 italic">{meeting.notes}</p>}
+          {meeting.notes && (
+            <p className="font-sans text-sm text-charcoal/70 mb-4 italic">
+              {meeting.notes}
+            </p>
+          )}
 
-        {meeting.notes && (
-          <p className="font-sans text-sm text-charcoal/70 mb-4 italic">
-            {meeting.notes}
-          </p>
-        )}
+          <AttendanceTracker
+            attendance={attendance}
+            currentMemberId={currentMemberId}
+            onRsvp={(status) => onRsvp(meeting.id, status)}
+          />
 
           {showDeleteConfirm && (
             <div className="mt-3 flex items-center gap-2 p-3 bg-red-50 rounded-lg border border-red-200">

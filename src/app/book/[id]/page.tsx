@@ -29,6 +29,7 @@ export default function BookDetailPage() {
   const [pendingPostValue, setPendingPostValue] = useState<number | null>(null);
   const [description, setDescription] = useState("");
   const [pageCount, setPageCount] = useState<number | null>(null);
+  const [coverSrc, setCoverSrc] = useState("");
 
   const fetchBook = useCallback(async () => {
     const { data } = await supabase
@@ -38,7 +39,8 @@ export default function BookDetailPage() {
       .single();
     if (data) {
       setBook(data);
-      if (data.page_count) setPageCount(data.page_count);
+      if (typeof data.page_count === "number") setPageCount(data.page_count);
+      setCoverSrc(data.cover_url || data.thumbnail_url || "");
       if (data.google_books_id) {
         try {
           const json = await fetchVolumeById(data.google_books_id);
@@ -227,12 +229,19 @@ export default function BookDetailPage() {
       {/* Book Header */}
       <div className="flex flex-col md:flex-row items-start gap-8 mb-10">
         <div className="flex-shrink-0 relative">
-          {(book.cover_url || book.thumbnail_url) && (
+          {coverSrc && (
             <img
-              src={book.cover_url || book.thumbnail_url || ""}
+              src={coverSrc}
               alt={book.title}
               className="w-48 h-72 object-cover rounded-lg shadow-xl"
               referrerPolicy="no-referrer"
+              onError={() => {
+                if (coverSrc !== (book.thumbnail_url || "")) {
+                  setCoverSrc(book.thumbnail_url || "");
+                } else {
+                  setCoverSrc("");
+                }
+              }}
             />
           )}
           {/* Club Score Badge */}
