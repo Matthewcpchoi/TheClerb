@@ -150,14 +150,7 @@ export default function ShelfPage() {
                 key={book.id}
                 className="bg-white/50 rounded-xl border border-cream-dark p-4 flex items-start gap-3"
               >
-                {(book.cover_url || book.thumbnail_url) && (
-                  <img
-                    src={book.thumbnail_url || book.cover_url || ""}
-                    alt={book.title}
-                    className="w-12 h-16 object-cover rounded shadow-sm flex-shrink-0"
-                    referrerPolicy="no-referrer"
-                  />
-                )}
+                {(book.cover_url || book.thumbnail_url) && <UpcomingBookCover book={book} />}
                 <div className="min-w-0 flex-1">
                   <p className="font-serif text-sm text-charcoal font-semibold truncate">
                     {book.title}
@@ -191,5 +184,27 @@ export default function ShelfPage() {
         />
       )}
     </div>
+  );
+}
+
+function UpcomingBookCover({ book }: { book: Book }) {
+  const [imageSrc, setImageSrc] = useState(book.thumbnail_url || book.cover_url || "");
+
+  if (!imageSrc) return null;
+
+  return (
+    <img
+      src={imageSrc}
+      alt={book.title}
+      className="w-12 h-16 object-cover rounded shadow-sm flex-shrink-0"
+      referrerPolicy="no-referrer"
+      onError={() => {
+        if (imageSrc !== (book.cover_url || "")) {
+          setImageSrc(book.cover_url || "");
+        } else {
+          setImageSrc("");
+        }
+      }}
+    />
   );
 }
