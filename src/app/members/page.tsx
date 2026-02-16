@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Member, Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
-import { getInitials, getAvatarColor, getExactPageCount } from "@/lib/utils";
+import { getInitials, getAvatarColor, getExactPageCount, getBookCoverCandidates } from "@/lib/utils";
 
 interface MemberRatingRow {
   member_id: string;
@@ -116,7 +116,9 @@ function MemberBookTile({
   book: Book;
   score: number | undefined;
 }) {
-  const [imageSrc, setImageSrc] = useState(book.thumbnail_url || book.cover_url || "");
+  const imageSources = getBookCoverCandidates(book);
+  const [imageIndex, setImageIndex] = useState(0);
+  const imageSrc = imageSources[imageIndex] || "";
 
   return (
     <div className="text-center w-24 flex-shrink-0">
@@ -130,13 +132,7 @@ function MemberBookTile({
             alt={book.title}
             className="w-24 h-36 object-cover rounded shadow-lg"
             referrerPolicy="no-referrer"
-            onError={() => {
-              if (imageSrc !== (book.cover_url || "")) {
-                setImageSrc(book.cover_url || "");
-              } else {
-                setImageSrc("");
-              }
-            }}
+            onError={() => setImageIndex((prev) => prev + 1)}
           />
         ) : (
           <div

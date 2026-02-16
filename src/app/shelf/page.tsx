@@ -6,6 +6,7 @@ import { Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
 import BookShelf from "@/components/BookShelf";
 import BookSearch from "@/components/BookSearch";
+import { getBookCoverCandidates } from "@/lib/utils";
 
 export default function ShelfPage() {
   const { currentMember } = useMember();
@@ -188,7 +189,9 @@ export default function ShelfPage() {
 }
 
 function UpcomingBookCover({ book }: { book: Book }) {
-  const [imageSrc, setImageSrc] = useState(book.thumbnail_url || book.cover_url || "");
+  const imageSources = getBookCoverCandidates(book);
+  const [imageIndex, setImageIndex] = useState(0);
+  const imageSrc = imageSources[imageIndex] || "";
 
   if (!imageSrc) return null;
 
@@ -198,13 +201,7 @@ function UpcomingBookCover({ book }: { book: Book }) {
       alt={book.title}
       className="w-12 h-16 object-cover rounded shadow-sm flex-shrink-0"
       referrerPolicy="no-referrer"
-      onError={() => {
-        if (imageSrc !== (book.cover_url || "")) {
-          setImageSrc(book.cover_url || "");
-        } else {
-          setImageSrc("");
-        }
-      }}
+      onError={() => setImageIndex((prev) => prev + 1)}
     />
   );
 }

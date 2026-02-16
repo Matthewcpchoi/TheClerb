@@ -11,6 +11,7 @@ import DiscussionTopics from "@/components/DiscussionTopics";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchVolumeById } from "@/lib/google-books";
+import { getBookCoverCandidates } from "@/lib/utils";
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -29,7 +30,8 @@ export default function BookDetailPage() {
   const [pendingPostValue, setPendingPostValue] = useState<number | null>(null);
   const [description, setDescription] = useState("");
   const [pageCount, setPageCount] = useState<number | null>(null);
-  const [coverSrc, setCoverSrc] = useState("");
+  const [coverSources, setCoverSources] = useState<string[]>([]);
+  const [coverIndex, setCoverIndex] = useState(0);
 
   const fetchBook = useCallback(async () => {
     const { data } = await supabase
@@ -40,7 +42,8 @@ export default function BookDetailPage() {
     if (data) {
       setBook(data);
       if (typeof data.page_count === "number") setPageCount(data.page_count);
-      setCoverSrc(data.cover_url || data.thumbnail_url || "");
+      setCoverSources(getBookCoverCandidates(data));
+      setCoverIndex(0);
       if (data.google_books_id) {
         try {
           const json = await fetchVolumeById(data.google_books_id);
@@ -229,19 +232,13 @@ export default function BookDetailPage() {
       {/* Book Header */}
       <div className="flex flex-col md:flex-row items-start gap-8 mb-10">
         <div className="flex-shrink-0 relative">
-          {coverSrc && (
+          {coverSources[coverIndex] && (
             <img
-              src={coverSrc}
+              src={coverSources[coverIndex]}
               alt={book.title}
               className="w-48 h-72 object-cover rounded-lg shadow-xl"
               referrerPolicy="no-referrer"
-              onError={() => {
-                if (coverSrc !== (book.thumbnail_url || "")) {
-                  setCoverSrc(book.thumbnail_url || "");
-                } else {
-                  setCoverSrc("");
-                }
-              }}
+              onError={() => setCoverIndex((prev) => prev + 1)}
             />
           )}
           {/* Club Score Badge */}

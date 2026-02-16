@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Book, Meeting } from "@/types";
-import { formatDate, formatTime, getExactPageCount } from "@/lib/utils";
+import { formatDate, formatTime, getBookCoverCandidates, getExactPageCount } from "@/lib/utils";
 import Link from "next/link";
 
 export default function Home() {
@@ -19,6 +19,12 @@ export default function Home() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const [currentBookCoverIndex, setCurrentBookCoverIndex] = useState(0);
+
+  useEffect(() => {
+    setCurrentBookCoverIndex(0);
+  }, [currentBook?.id]);
 
   async function fetchData() {
     const { data: reading } = await supabase
@@ -84,10 +90,12 @@ export default function Home() {
     });
   }
 
+  const currentBookCoverSources = currentBook ? getBookCoverCandidates(currentBook) : [];
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="text-center pt-4 pb-6">
-        <h1 className="font-script text-[28px] text-mahogany tracking-wide">
+        <h1 className="font-script text-[36px] text-mahogany tracking-wide">
           The Clerb
         </h1>
       </div>
@@ -100,12 +108,13 @@ export default function Home() {
                 Currently Reading
               </p>
               <div className="flex items-start gap-4 flex-1">
-                {(currentBook.cover_url || currentBook.thumbnail_url) && (
+                {currentBookCoverSources[currentBookCoverIndex] && (
                   <img
-                    src={currentBook.cover_url || currentBook.thumbnail_url || ""}
+                    src={currentBookCoverSources[currentBookCoverIndex]}
                     alt={currentBook.title}
                     className="w-20 h-28 object-cover rounded-lg shadow-lg flex-shrink-0"
                     referrerPolicy="no-referrer"
+                    onError={() => setCurrentBookCoverIndex((prev) => prev + 1)}
                   />
                 )}
                 <div className="min-w-0">
