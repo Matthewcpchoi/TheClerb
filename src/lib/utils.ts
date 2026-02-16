@@ -71,12 +71,32 @@ function normalizeCoverUrl(url: string | null | undefined): string | null {
   return trimmed;
 }
 
+function getGoogleCoverVariants(url: string): string[] {
+  if (!url.includes("books.google")) return [url];
+
+  const variants = new Set<string>([url]);
+
+  for (const zoom of [3, 2, 1, 0]) {
+    variants.add(url.replace(/zoom=\d/, `zoom=${zoom}`));
+  }
+
+  // Google sometimes fails with edge=curl in some contexts.
+  variants.add(url.replace(/([?&])edge=curl&?/, "$1").replace(/[?&]$/, ""));
+
+  // Also try variants with both zoom adjustments and edge removed.
+  for (const value of Array.from(variants)) {
+    variants.add(value.replace(/([?&])edge=curl&?/, "$1").replace(/[?&]$/, ""));
+  }
+
+  return Array.from(variants);
+}
+
 /**
  * Returns an ordered list of cover URLs to try, from best to worst quality.
  * Components should render the first URL and cascade via onError.
  *
- * For Google Books URLs the function generates additional zoom variants so
- * the browser can fall back if one resolution 404s.
+ * For Google Books URLs the function generates additional variants so
+ * the browser can fall back if one URL fails.
  */
 export function getBookCoverCandidates(book: {
   thumbnail_url?: string | null;
@@ -85,25 +105,15 @@ export function getBookCoverCandidates(book: {
   const cover = normalizeCoverUrl(book.cover_url);
   const thumbnail = normalizeCoverUrl(book.thumbnail_url);
 
-  const candidates: (string | null)[] = [cover];
+  const candidates = new Set<string>();
 
-  // If cover is a Google Books URL, also add zoom variants as fallbacks
-  if (cover && cover.includes("books.google")) {
-    const zoom1 = cover.replace(/zoom=\d/, "zoom=1");
-    if (zoom1 !== cover) candidates.push(zoom1);
-  }
-
-  candidates.push(thumbnail);
-
-  // If thumbnail is a Google Books URL, add a zoom=3 variant
-  if (thumbnail && thumbnail.includes("books.google")) {
-    const zoom3 = thumbnail.replace(/zoom=\d/, "zoom=3");
-    if (zoom3 !== thumbnail && !candidates.includes(zoom3)) {
-      candidates.push(zoom3);
+  for (const url of [cover, thumbnail]) {
+    if (!url) continue;
+    for (const variant of getGoogleCoverVariants(url)) {
+      candidates.add(variant);
     }
   }
 
-  return candidates.filter(
-    (url, index, arr): url is string => !!url && arr.indexOf(url) === index
-  );
+  return Array.from(candidates);
 }
+

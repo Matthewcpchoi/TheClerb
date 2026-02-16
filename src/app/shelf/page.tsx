@@ -136,6 +136,7 @@ export default function ShelfPage() {
         completedBooks={completedBooks}
         hallOfFame={hallOfFame}
         hallOfShame={hallOfShame}
+        bookRatings={bookRatings}
       />
 
       {upcomingBooks.length > 0 && (

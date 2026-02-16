@@ -10,9 +10,20 @@ interface BookShelfProps {
   completedBooks: Book[];
   hallOfFame: (Book & { avgRating: number }) | null;
   hallOfShame: (Book & { avgRating: number }) | null;
+  bookRatings: Record<string, number>;
 }
 
-function BookTile({ book }: { book: Book }) {
+function ScoreBadge({ score, className = "bg-gold" }: { score: number; className?: string }) {
+  return (
+    <div
+      className={`absolute -bottom-3 -right-3 text-cream rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center shadow-lg border-2 border-cream ${className}`}
+    >
+      <span className="font-serif text-sm sm:text-base font-bold leading-none">{score.toFixed(1)}</span>
+    </div>
+  );
+}
+
+function BookTile({ book, score }: { book: Book; score?: number }) {
   const imageSources = useMemo(() => getBookCoverCandidates(book), [book]);
   const [imageIndex, setImageIndex] = useState(0);
   const imageSrc = imageSources[imageIndex] || "";
@@ -29,7 +40,7 @@ function BookTile({ book }: { book: Book }) {
             {imageSrc ? (
               <img
                 src={imageSrc}
-                alt=""
+                alt={book.title}
                 className="absolute inset-0 w-full h-full object-cover rounded"
                 style={{ color: "transparent" }}
                 referrerPolicy="no-referrer"
@@ -38,6 +49,7 @@ function BookTile({ book }: { book: Book }) {
             ) : null}
             <p className="font-serif text-cream text-xs text-center leading-tight">{book.title}</p>
           </div>
+          {typeof score === "number" && <ScoreBadge score={score} />}
         </div>
         <p className="font-serif text-sm text-cream mt-2 line-clamp-2 min-h-10">{book.title}</p>
         {typeof pageCount === "number" && (
@@ -53,16 +65,15 @@ function FeaturedBook({
   title,
   score,
   dim,
+  scoreBadgeClassName,
 }: {
   book: (Book & { avgRating: number }) | null;
   title: string;
   score?: number;
   dim?: boolean;
+  scoreBadgeClassName: string;
 }) {
-  const imageSources = useMemo(
-    () => (book ? getBookCoverCandidates(book) : []),
-    [book]
-  );
+  const imageSources = useMemo(() => (book ? getBookCoverCandidates(book) : []), [book]);
   const [imageIndex, setImageIndex] = useState(0);
   const imageSrc = imageSources[imageIndex] || "";
 
@@ -74,6 +85,8 @@ function FeaturedBook({
       </div>
     );
   }
+
+  const resolvedScore = score ?? book.avgRating;
 
   return (
     <Link href={`/book/${book.id}`} className="block text-center">
@@ -89,17 +102,20 @@ function FeaturedBook({
           {imageSrc ? (
             <img
               src={imageSrc}
-              alt=""
+              alt={book.title}
               className="absolute inset-0 w-full h-full object-cover rounded"
-              style={{ color: "transparent", ...(dim ? { filter: "saturate(0.65) brightness(0.85)" } : {}) }}
+              style={{
+                color: "transparent",
+                ...(dim ? { filter: "saturate(0.65) brightness(0.85)" } : {}),
+              }}
               referrerPolicy="no-referrer"
               onError={() => setImageIndex((prev) => prev + 1)}
             />
           ) : null}
           <p className="font-serif text-cream text-xs text-center">{book.title}</p>
         </div>
+        <ScoreBadge score={resolvedScore} className={scoreBadgeClassName} />
       </div>
-      <p className="font-serif text-sm text-gold mt-2 font-semibold">{(score ?? book.avgRating).toFixed(1)}</p>
     </Link>
   );
 }
@@ -108,7 +124,8 @@ export default function BookShelf({
   currentBook,
   completedBooks,
   hallOfFame,
-  hallOfShame
+  hallOfShame,
+  bookRatings,
 }: BookShelfProps) {
   const emptyCurrentReadTile = useMemo(
     () => (
@@ -135,7 +152,11 @@ export default function BookShelf({
               </p>
               <div className="relative z-10 h-full flex items-end justify-center pt-10">
                 <div className="flex items-end justify-center pb-2">
-                  {currentBook ? <BookTile book={currentBook} /> : emptyCurrentReadTile}
+                  {currentBook ? (
+                    <BookTile book={currentBook} score={bookRatings[currentBook.id]} />
+                  ) : (
+                    emptyCurrentReadTile
+                  )}
                 </div>
               </div>
             </section>
@@ -143,9 +164,12 @@ export default function BookShelf({
 
             <section className="shelf-back px-3 sm:px-5 py-3 sm:py-4 min-h-[200px] sm:min-h-[220px]">
               <p className="font-serif text-sm sm:text-base tracking-wide text-cream/90 mb-3">PAST READS</p>
-              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ WebkitOverflowScrolling: "touch" }}>
+              <div
+                className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
                 {completedBooks.map((book) => (
-                  <BookTile key={book.id} book={book} />
+                  <BookTile key={book.id} book={book} score={bookRatings[book.id]} />
                 ))}
               </div>
             </section>
@@ -158,6 +182,7 @@ export default function BookShelf({
                     book={hallOfFame}
                     title="HALL OF FAME"
                     score={hallOfFame?.avgRating}
+                    scoreBadgeClassName="bg-green-600"
                   />
                 </div>
 
@@ -166,6 +191,7 @@ export default function BookShelf({
                     book={hallOfShame}
                     title="HALL OF SHAME"
                     score={hallOfShame?.avgRating}
+                    scoreBadgeClassName="bg-red-600"
                     dim
                   />
                 </div>
