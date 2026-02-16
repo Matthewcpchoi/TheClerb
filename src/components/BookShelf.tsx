@@ -1,7 +1,6 @@
 "use client";
 
 import { Book } from "@/types";
-import BookSpine from "./BookSpine";
 import Link from "next/link";
 
 interface BookShelfProps {
@@ -109,7 +108,7 @@ export default function BookShelf({
             </div>
             <WoodShelf />
 
-            {/* Tier 2 & 3: Completed Books — Spines */}
+            {/* Tier 2 & 3: Completed Books — Cover Display */}
             {(() => {
               const midpoint = Math.ceil(completedBooks.length / 2);
               const tier2 = completedBooks.slice(0, midpoint);
@@ -122,9 +121,36 @@ export default function BookShelf({
                         <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-wider mb-3">
                           Past Reads
                         </p>
-                        <div className="flex items-end gap-[3px] overflow-x-auto pb-2 scrollbar-hide">
-                          {tier2.map((book, i) => (
-                            <BookSpine key={book.id} book={book} index={i} />
+                        <div className="flex items-end gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                          {tier2.map((book) => (
+                            <Link key={book.id} href={`/book/${book.id}`} className="block flex-shrink-0">
+                              <div
+                                className="relative cursor-pointer transition-transform duration-200 hover:-translate-y-1"
+                                style={{
+                                  transform: "perspective(400px) rotateY(-3deg)",
+                                  transformOrigin: "left center",
+                                }}
+                              >
+                                {book.cover_url || book.thumbnail_url ? (
+                                  <img
+                                    src={book.thumbnail_url || book.cover_url || ""}
+                                    alt={book.title}
+                                    className="w-20 h-28 object-cover rounded shadow-lg"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <div
+                                    className="w-20 h-28 rounded shadow-lg flex items-center justify-center p-2"
+                                    style={{ backgroundColor: book.spine_color || "#3C1518" }}
+                                  >
+                                    <p className="font-serif text-cream text-[10px] text-center leading-tight">
+                                      {book.title}
+                                    </p>
+                                  </div>
+                                )}
+                                <div className="absolute inset-0 rounded bg-gradient-to-r from-black/10 to-transparent pointer-events-none" />
+                              </div>
+                            </Link>
                           ))}
                         </div>
                       </>
@@ -141,13 +167,36 @@ export default function BookShelf({
                   {tier3.length > 0 && (
                     <>
                       <div className="shelf-back px-4 pt-4 pb-2 min-h-[260px]">
-                        <div className="flex items-end gap-[3px] overflow-x-auto pb-2 scrollbar-hide">
-                          {tier3.map((book, i) => (
-                            <BookSpine
-                              key={book.id}
-                              book={book}
-                              index={i + midpoint}
-                            />
+                        <div className="flex items-end gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                          {tier3.map((book) => (
+                            <Link key={book.id} href={`/book/${book.id}`} className="block flex-shrink-0">
+                              <div
+                                className="relative cursor-pointer transition-transform duration-200 hover:-translate-y-1"
+                                style={{
+                                  transform: "perspective(400px) rotateY(-3deg)",
+                                  transformOrigin: "left center",
+                                }}
+                              >
+                                {book.cover_url || book.thumbnail_url ? (
+                                  <img
+                                    src={book.thumbnail_url || book.cover_url || ""}
+                                    alt={book.title}
+                                    className="w-20 h-28 object-cover rounded shadow-lg"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <div
+                                    className="w-20 h-28 rounded shadow-lg flex items-center justify-center p-2"
+                                    style={{ backgroundColor: book.spine_color || "#3C1518" }}
+                                  >
+                                    <p className="font-serif text-cream text-[10px] text-center leading-tight">
+                                      {book.title}
+                                    </p>
+                                  </div>
+                                )}
+                                <div className="absolute inset-0 rounded bg-gradient-to-r from-black/10 to-transparent pointer-events-none" />
+                              </div>
+                            </Link>
                           ))}
                         </div>
                       </div>

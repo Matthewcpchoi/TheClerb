@@ -9,11 +9,13 @@ import RatingSlider from "@/components/RatingSlider";
 import RatingReveal from "@/components/RatingReveal";
 import DiscussionTopics from "@/components/DiscussionTopics";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function BookDetailPage() {
   const params = useParams();
   const bookId = params.id as string;
   const { currentMember } = useMember();
+  const router = useRouter();
 
   const [book, setBook] = useState<Book | null>(null);
   const [ratings, setRatings] = useState<Rating[]>([]);
@@ -225,14 +227,31 @@ export default function BookDetailPage() {
 
       {/* Book Header */}
       <div className="flex flex-col md:flex-row items-start gap-8 mb-10">
-        {(book.cover_url || book.thumbnail_url) && (
-          <img
-            src={book.cover_url || book.thumbnail_url || ""}
-            alt={book.title}
-            className="w-48 h-72 object-cover rounded-lg shadow-xl flex-shrink-0"
-            referrerPolicy="no-referrer"
-          />
-        )}
+        <div className="flex-shrink-0 relative">
+          {(book.cover_url || book.thumbnail_url) && (
+            <img
+              src={book.cover_url || book.thumbnail_url || ""}
+              alt={book.title}
+              className="w-48 h-72 object-cover rounded-lg shadow-xl"
+              referrerPolicy="no-referrer"
+            />
+          )}
+          {/* Club Score Badge */}
+          {(() => {
+            const visibleRatings = ratings.filter((r) => r.is_visible);
+            const vals = visibleRatings
+              .map((r) => r.post_rating ?? r.pre_rating)
+              .filter((v): v is number => v !== null);
+            if (vals.length === 0) return null;
+            const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+            return (
+              <div className="absolute -bottom-3 -right-3 bg-gold text-cream rounded-full w-14 h-14 flex flex-col items-center justify-center shadow-lg border-2 border-cream">
+                <span className="font-serif text-lg font-bold leading-none">{avg.toFixed(1)}</span>
+                <span className="font-sans text-[8px] uppercase tracking-wider leading-none mt-0.5">Club</span>
+              </div>
+            );
+          })()}
+        </div>
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-2">
             <span
@@ -280,6 +299,20 @@ export default function BookDetailPage() {
                 className="px-3 py-1 rounded text-xs font-sans border border-sage text-sage hover:bg-sage hover:text-cream transition-colors"
               >
                 Mark Completed
+              </button>
+            )}
+            {currentMember && (
+              <button
+                onClick={async () => {
+                  if (!confirm(`Remove "${book.title}" from the shelf?`)) return;
+                  await supabase.from("ratings").delete().eq("book_id", bookId);
+                  await supabase.from("discussion_topics").delete().eq("book_id", bookId);
+                  await supabase.from("books").delete().eq("id", bookId);
+                  router.push("/shelf");
+                }}
+                className="px-3 py-1 rounded text-xs font-sans border border-red-300 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+              >
+                Remove
               </button>
             )}
           </div>
