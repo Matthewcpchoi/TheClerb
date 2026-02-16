@@ -1,12 +1,26 @@
 import { GoogleBooksResult } from "@/types";
 
+function getGoogleBooksApiKey(): string {
+  return (
+    process.env.NEXT_PUBLIC_GOOGLE_BOOKS_KEY ||
+    process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY ||
+    ""
+  );
+}
+
+function withApiKey(url: string): string {
+  const apiKey = getGoogleBooksApiKey();
+  if (!apiKey) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}key=${encodeURIComponent(apiKey)}`;
+}
+
 export async function searchBooks(query: string): Promise<GoogleBooksResult[]> {
   if (!query.trim()) return [];
 
   const encodedQuery = encodeURIComponent(query.trim());
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY || "";
-  const keyParam = apiKey ? `&key=${apiKey}` : "";
-  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodedQuery}&maxResults=10&printType=books${keyParam}`;
+  const baseUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodedQuery}&maxResults=10&printType=books`;
+  const url = withApiKey(baseUrl);
 
   try {
     const res = await fetch(url);
@@ -14,9 +28,16 @@ export async function searchBooks(query: string): Promise<GoogleBooksResult[]> {
     const data = await res.json();
     return data.items || [];
   } catch {
-    // If direct call fails, try with no-cors workaround or return empty
     return [];
   }
+}
+
+export async function fetchVolumeById(volumeId: string) {
+  const baseUrl = `https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(volumeId)}`;
+  const url = withApiKey(baseUrl);
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return res.json();
 }
 
 export function getBookCoverUrl(result: GoogleBooksResult): string | null {

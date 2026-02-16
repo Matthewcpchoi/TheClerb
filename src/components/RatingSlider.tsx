@@ -24,14 +24,14 @@ export default function RatingSlider({
       <div className="flex items-center justify-between">
         <span className="font-sans text-sm text-warm-brown">{label}</span>
         <span className="font-serif text-2xl text-mahogany font-bold tabular-nums">
-          {value.toFixed(2)}
+          {value.toFixed(1)}
         </span>
       </div>
       <input
         type="range"
         min="0"
         max="10"
-        step="0.01"
+        step="0.1"
         value={value}
         onChange={(e) => setValue(parseFloat(e.target.value))}
         className="rating-slider w-full"

@@ -13,6 +13,7 @@ export default function ShelfPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [hallOfFame, setHallOfFame] = useState<(Book & { avgRating: number }) | null>(null);
   const [hallOfShame, setHallOfShame] = useState<(Book & { avgRating: number }) | null>(null);
+  const [bookRatings, setBookRatings] = useState<Record<string, number>>({});
 
   const fetchBooks = useCallback(async () => {
     const { data } = await supabase
@@ -21,7 +22,7 @@ export default function ShelfPage() {
       .order("created_at", { ascending: false });
     if (data) {
       setBooks(data);
-      await computeHallOfFameShame(data);
+      await computeRatings(data);
     }
   }, []);
 
@@ -29,11 +30,17 @@ export default function ShelfPage() {
     fetchBooks();
   }, [fetchBooks]);
 
-  async function computeHallOfFameShame(allBooks: Book[]) {
+  async function computeRatings(allBooks: Book[]) {
     const completed = allBooks.filter((b) => b.status === "completed");
-    if (completed.length === 0) return;
+    if (completed.length === 0) {
+      setBookRatings({});
+      setHallOfFame(null);
+      setHallOfShame(null);
+      return;
+    }
 
-    const bookRatings: { book: Book; avg: number }[] = [];
+    const ratingMap: Record<string, number> = {};
+    const bookRatingRows: { book: Book; avg: number }[] = [];
 
     for (const book of completed) {
       const { data: ratings } = await supabase
@@ -46,27 +53,45 @@ export default function ShelfPage() {
         const vals = ratings
           .map((r) => r.post_rating ?? r.pre_rating)
           .filter((v): v is number => v !== null);
+
         if (vals.length > 0) {
           const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-          bookRatings.push({ book, avg });
+          ratingMap[book.id] = avg;
+          bookRatingRows.push({ book, avg });
         }
       }
     }
 
-    if (bookRatings.length > 0) {
-      bookRatings.sort((a, b) => b.avg - a.avg);
-      const best = bookRatings[0];
-      const worst = bookRatings[bookRatings.length - 1];
+    setBookRatings(ratingMap);
+
+    if (bookRatingRows.length > 0) {
+      bookRatingRows.sort((a, b) => b.avg - a.avg);
+      const best = bookRatingRows[0];
+      const worst = bookRatingRows[bookRatingRows.length - 1];
 
       setHallOfFame({ ...best.book, avgRating: best.avg });
-      if (bookRatings.length > 1) {
+      if (bookRatingRows.length > 1) {
         setHallOfShame({ ...worst.book, avgRating: worst.avg });
+      } else {
+        setHallOfShame(null);
       }
+    } else {
+      setHallOfFame(null);
+      setHallOfShame(null);
     }
   }
 
   const currentBook = books.find((b) => b.status === "reading") || null;
-  const completedBooks = books.filter((b) => b.status === "completed");
+  const completedBooks = books
+    .filter((b) => b.status === "completed")
+    .sort((a, b) => {
+      const aScore = bookRatings[a.id];
+      const bScore = bookRatings[b.id];
+      if (aScore === undefined && bScore === undefined) return 0;
+      if (aScore === undefined) return 1;
+      if (bScore === undefined) return -1;
+      return bScore - aScore;
+    });
   const upcomingBooks = books.filter((b) => b.status === "upcoming");
 
   async function handleBookAdded(book: Book) {
@@ -113,9 +138,9 @@ export default function ShelfPage() {
         completedBooks={completedBooks}
         hallOfFame={hallOfFame}
         hallOfShame={hallOfShame}
+        bookRatings={bookRatings}
       />
 
-      {/* Upcoming Books */}
       {upcomingBooks.length > 0 && (
         <div className="mt-10">
           <h2 className="font-serif text-xl text-charcoal mb-4">Up Next</h2>
@@ -157,17 +182,6 @@ export default function ShelfPage() {
         </div>
       )}
 
-      {/* Mark current as complete */}
-      {currentBook && currentMember && (
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => handleStatusChange(currentBook.id, "completed")}
-            className="px-5 py-2 rounded-lg border border-sage text-sage font-sans text-sm hover:bg-sage hover:text-cream transition-colors"
-          >
-            Mark &ldquo;{currentBook.title}&rdquo; as Completed
-          </button>
-        </div>
-      )}
 
       {showSearch && currentMember && (
         <BookSearch

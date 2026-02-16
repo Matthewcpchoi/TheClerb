@@ -10,6 +10,7 @@ import RatingReveal from "@/components/RatingReveal";
 import DiscussionTopics from "@/components/DiscussionTopics";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { fetchVolumeById } from "@/lib/google-books";
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -40,10 +41,8 @@ export default function BookDetailPage() {
       if (data.page_count) setPageCount(data.page_count);
       if (data.google_books_id) {
         try {
-          const res = await fetch(
-            `https://www.googleapis.com/books/v1/volumes/${data.google_books_id}`
-          );
-          const json = await res.json();
+          const json = await fetchVolumeById(data.google_books_id);
+          if (!json) return;
           if (json.volumeInfo?.description) {
             setDescription(json.volumeInfo.description);
           }
@@ -144,7 +143,7 @@ export default function BookDetailPage() {
     if (!currentMember || !myRating) return;
 
     const preVal = myRating.pre_rating ?? 5;
-    const changed = Math.abs(value - preVal) > 0.05;
+    const changed = Math.abs(value - preVal) > 0.001;
 
     if (changed && !pendingPostValue) {
       // Score changed from pre — ask for reason before saving
@@ -269,37 +268,29 @@ export default function BookDetailPage() {
                   ? "Completed"
                   : "Upcoming"}
             </span>
-            {currentMember && book.status === "completed" && (
-              <button
-                onClick={async () => {
+            {currentMember && (
+              <select
+                value={book.status}
+                onChange={async (e) => {
+                  const nextStatus = e.target.value as Book["status"];
+                  if (nextStatus === "reading") {
+                    await supabase
+                      .from("books")
+                      .update({ status: "completed" })
+                      .eq("status", "reading")
+                      .neq("id", bookId);
+                  }
                   await supabase
                     .from("books")
-                    .update({ status: "completed" })
-                    .eq("status", "reading");
-                  await supabase
-                    .from("books")
-                    .update({ status: "reading" })
+                    .update({ status: nextStatus })
                     .eq("id", bookId);
                   fetchBook();
                 }}
-                className="px-3 py-1 rounded text-xs font-sans bg-sage/20 text-sage hover:bg-sage/30 transition-colors"
+                className="px-3 py-1 rounded text-xs font-sans border border-cream-dark bg-white text-charcoal focus:outline-none"
               >
-                Read Again
-              </button>
-            )}
-            {currentMember && book.status === "reading" && (
-              <button
-                onClick={async () => {
-                  await supabase
-                    .from("books")
-                    .update({ status: "completed" })
-                    .eq("id", bookId);
-                  fetchBook();
-                }}
-                className="px-3 py-1 rounded text-xs font-sans border border-sage text-sage hover:bg-sage hover:text-cream transition-colors"
-              >
-                Mark Completed
-              </button>
+                <option value="reading">Currently Reading</option>
+                <option value="completed">Completed</option>
+              </select>
             )}
             {currentMember && (
               <button
@@ -364,7 +355,7 @@ export default function BookDetailPage() {
                   Your Pre-Club Rating
                 </p>
                 <p className="font-serif text-xl text-mahogany font-bold">
-                  {myRating!.pre_rating?.toFixed(2)}
+                  {myRating!.pre_rating?.toFixed(1)}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -388,7 +379,7 @@ export default function BookDetailPage() {
                   }`}
                 >
                   {myRating!.is_visible
-                    ? "Rating Visible"
+                    ? "Rating Visible (click to hide)"
                     : "Make Rating Visible"}
                 </button>
               </div>
@@ -414,7 +405,7 @@ export default function BookDetailPage() {
           </div>
         )}
 
-        {/* Post-club: "Change your score?" button (only after book completed, has pre, no post yet) */}
+        {/* Post-club: "Post-Club Rating" button (only after book completed, has pre, no post yet) */}
         {currentMember && hasPreRating && !hasPostRating && !editingPre && book.status === "completed" && (
           <>
             {!showPostRating ? (
@@ -422,7 +413,7 @@ export default function BookDetailPage() {
                 onClick={() => setShowPostRating(true)}
                 className="w-full mb-6 py-2.5 rounded-lg border border-gold text-gold font-sans text-sm hover:bg-gold/10 transition-colors"
               >
-                Change your score?
+                Post-Club Rating
               </button>
             ) : (
               <div className="mb-6 p-4 rounded-lg bg-cream-dark/30 space-y-4">
@@ -437,9 +428,9 @@ export default function BookDetailPage() {
                   <>
                     <div className="text-center">
                       <p className="font-sans text-sm text-warm-brown mb-1">Your new score</p>
-                      <p className="font-serif text-2xl text-gold font-bold">{pendingPostValue.toFixed(2)}</p>
+                      <p className="font-serif text-2xl text-gold font-bold">{pendingPostValue.toFixed(1)}</p>
                       <p className="font-sans text-xs text-warm-brown/60 mt-1">
-                        Changed from {myRating!.pre_rating?.toFixed(2)}
+                        Changed from {myRating!.pre_rating?.toFixed(1)}
                       </p>
                     </div>
                     <textarea
@@ -481,13 +472,13 @@ export default function BookDetailPage() {
                 <div>
                   <p className="font-sans text-xs text-warm-brown/60">Pre</p>
                   <p className="font-serif text-xl text-mahogany font-bold">
-                    {myRating!.pre_rating?.toFixed(2)}
+                    {myRating!.pre_rating?.toFixed(1)}
                   </p>
                 </div>
                 <div>
                   <p className="font-sans text-xs text-warm-brown/60">Post</p>
                   <p className="font-serif text-xl text-gold font-bold">
-                    {myRating!.post_rating?.toFixed(2)}
+                    {myRating!.post_rating?.toFixed(1)}
                   </p>
                 </div>
               </div>
@@ -523,7 +514,7 @@ export default function BookDetailPage() {
               <>
                 <div className="text-center">
                   <p className="font-sans text-sm text-warm-brown mb-1">Your new score</p>
-                  <p className="font-serif text-2xl text-gold font-bold">{pendingPostValue.toFixed(2)}</p>
+                  <p className="font-serif text-2xl text-gold font-bold">{pendingPostValue.toFixed(1)}</p>
                 </div>
                 <textarea
                   value={postReason}
