@@ -53,6 +53,7 @@ export default function BookSearch({
         thumbnail_url: thumbnailUrl,
         spine_color: spineColor,
         google_books_id: result.id,
+        total_pages: result.volumeInfo.pageCount || null,
         status: "upcoming",
         added_by: memberId,
       })
@@ -140,6 +141,11 @@ export default function BookSearch({
                     {result.volumeInfo.authors && (
                       <p className="font-sans text-xs text-warm-brown mt-0.5">
                         {result.volumeInfo.authors.join(", ")}
+                      </p>
+                    )}
+                    {result.volumeInfo.pageCount && (
+                      <p className="font-sans text-xs text-warm-brown/50 mt-0.5">
+                        {result.volumeInfo.pageCount} pages
                       </p>
                     )}
                   </div>

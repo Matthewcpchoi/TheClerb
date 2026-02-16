@@ -10,6 +10,7 @@ export default function Home() {
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalMembers: 0,
+    totalPages: 0,
     lastAvgRating: null as number | null,
   });
 
@@ -36,6 +37,16 @@ export default function Home() {
     const { count: memberCount } = await supabase
       .from("members")
       .select("*", { count: "exact", head: true });
+
+    // Fetch total pages from completed books
+    const { data: completedBooks } = await supabase
+      .from("books")
+      .select("total_pages")
+      .eq("status", "completed");
+    const totalPages = (completedBooks || []).reduce(
+      (sum, b) => sum + (b.total_pages || 0),
+      0
+    );
 
     // Get last completed book's avg rating
     const { data: lastBook } = await supabase
@@ -66,6 +77,7 @@ export default function Home() {
     setStats({
       totalBooks: bookCount || 0,
       totalMembers: memberCount || 0,
+      totalPages,
       lastAvgRating: lastAvg,
     });
   }
@@ -106,6 +118,11 @@ export default function Home() {
                     {currentBook.author}
                   </p>
                 )}
+                {currentBook.total_pages && (
+                  <p className="font-sans text-sm text-warm-brown/60 mt-1">
+                    {currentBook.total_pages.toLocaleString()} pages
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -127,13 +144,21 @@ export default function Home() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">
             {stats.totalBooks}
           </p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">
             Books Read
+          </p>
+        </div>
+        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
+          <p className="font-serif text-3xl text-mahogany font-bold">
+            {stats.totalPages.toLocaleString()}
+          </p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">
+            Pages Read
           </p>
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">

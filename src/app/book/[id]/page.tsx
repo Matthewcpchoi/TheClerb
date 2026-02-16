@@ -223,8 +223,13 @@ export default function BookDetailPage() {
             {book.title}
           </h1>
           {book.author && (
-            <p className="font-sans text-lg text-warm-brown mb-4">
+            <p className="font-sans text-lg text-warm-brown mb-2">
               {book.author}
+            </p>
+          )}
+          {book.total_pages && (
+            <p className="font-sans text-sm text-warm-brown/60 mb-4">
+              {book.total_pages.toLocaleString()} pages
             </p>
           )}
           {description && (
