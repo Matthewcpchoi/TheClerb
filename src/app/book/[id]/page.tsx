@@ -250,9 +250,8 @@ export default function BookDetailPage() {
             if (vals.length === 0) return null;
             const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
             return (
-              <div className="absolute -bottom-3 -right-3 bg-gold text-cream rounded-full w-14 h-14 flex flex-col items-center justify-center shadow-lg border-2 border-cream">
+              <div className="absolute -bottom-3 -right-3 bg-gold text-cream rounded-full w-14 h-14 flex items-center justify-center shadow-lg border-2 border-cream">
                 <span className="font-serif text-lg font-bold leading-none">{avg.toFixed(1)}</span>
-                <span className="font-sans text-[8px] uppercase tracking-wider leading-none mt-0.5">Club</span>
               </div>
             );
           })()}
