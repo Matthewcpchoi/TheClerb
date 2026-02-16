@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Book, Meeting } from "@/types";
 import { formatDate, formatTime, getBookCoverCandidates, getExactPageCount } from "@/lib/utils";
+import { fetchVolumeById } from "@/lib/google-books";
 import Link from "next/link";
 
 export default function Home() {
@@ -47,8 +48,25 @@ export default function Home() {
 
     const { data: completedBooks } = await supabase
       .from("books")
-      .select("page_count,total_pages")
+      .select("id,page_count,total_pages,google_books_id")
       .eq("status", "completed");
+
+    // Backfill page counts from Google Books for books missing them
+    const booksToBackfill = (completedBooks || []).filter(
+      (b) => getExactPageCount(b) === null && b.google_books_id
+    );
+    await Promise.all(
+      booksToBackfill.map(async (b) => {
+        try {
+          const vol = await fetchVolumeById(b.google_books_id!);
+          const pc = vol?.volumeInfo?.pageCount;
+          if (typeof pc === "number" && pc > 0) {
+            b.page_count = pc;
+            await supabase.from("books").update({ page_count: pc }).eq("id", b.id);
+          }
+        } catch { /* skip */ }
+      })
+    );
 
     const pageValues = (completedBooks || [])
       .map((b) => getExactPageCount(b))
@@ -205,15 +223,17 @@ export default function Home() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className={`grid grid-cols-2 ${stats.totalPages ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4 mb-8`}>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalBooks}</p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Books Read</p>
         </div>
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">{(stats.totalPages ?? 0).toLocaleString()}</p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
-        </div>
+        {stats.totalPages !== null && stats.totalPages > 0 && (
+          <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
+            <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalPages.toLocaleString()}</p>
+            <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
+          </div>
+        )}
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalMembers}</p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Members</p>
