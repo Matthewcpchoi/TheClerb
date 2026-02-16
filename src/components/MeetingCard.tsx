@@ -84,6 +84,8 @@ export default function MeetingCard({
               )}
             </div>
           </div>
+        </Link>
+      )}
 
           {meeting.book && !hasBookCover && (
             <Link
@@ -98,11 +100,11 @@ export default function MeetingCard({
 
           {meeting.notes && <p className="font-sans text-sm text-charcoal/70 mb-4 italic">{meeting.notes}</p>}
 
-          <AttendanceTracker
-            attendance={attendance}
-            currentMemberId={currentMemberId}
-            onRsvp={(status) => onRsvp(meeting.id, status)}
-          />
+        {meeting.notes && (
+          <p className="font-sans text-sm text-charcoal/70 mb-4 italic">
+            {meeting.notes}
+          </p>
+        )}
 
           {showDeleteConfirm && (
             <div className="mt-3 flex items-center gap-2 p-3 bg-red-50 rounded-lg border border-red-200">

@@ -58,6 +58,15 @@ async function fetchMemberStats(members: Member[], completedBooks: Book[]) {
       .eq("member_id", member.id)
       .eq("status", "going");
 
+    const uniqueBooks = new Map<string, MemberBook>();
+    for (const b of ratedBooks) {
+      if (!uniqueBooks.has(b.id)) uniqueBooks.set(b.id, b);
+    }
+    const totalPagesRead = Array.from(uniqueBooks.values()).reduce(
+      (sum, b) => sum + (b.page_count || 0),
+      0
+    );
+
     statsMap[member.id] = {
       booksRead: ratedBookIds.size,
       avgRating:

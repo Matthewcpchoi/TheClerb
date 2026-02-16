@@ -9,6 +9,7 @@ import Link from "next/link";
 export default function Home() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
+  const [pastBooks, setPastBooks] = useState<Book[]>([]);
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalMembers: 0,
