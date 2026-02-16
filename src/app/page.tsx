@@ -95,7 +95,7 @@ export default function Home() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="text-center pt-4 pb-6">
-        <h1 className="font-script text-[38px] text-mahogany tracking-wide">
+        <h1 className="font-script text-[46px] text-mahogany tracking-wide">
           The Clerb
         </h1>
       </div>
@@ -108,14 +108,22 @@ export default function Home() {
                 Currently Reading
               </p>
               <div className="flex items-start gap-4 flex-1">
-                {currentBookCoverSources[currentBookCoverIndex] && (
+                {currentBookCoverSources[currentBookCoverIndex] ? (
                   <img
                     src={currentBookCoverSources[currentBookCoverIndex]}
-                    alt={currentBook.title}
+                    alt=""
                     className="w-20 h-28 object-cover rounded-lg shadow-lg flex-shrink-0"
+                    style={{ color: "transparent" }}
                     referrerPolicy="no-referrer"
                     onError={() => setCurrentBookCoverIndex((prev) => prev + 1)}
                   />
+                ) : (
+                  <div
+                    className="w-20 h-28 rounded-lg shadow-lg flex-shrink-0 flex items-center justify-center p-2"
+                    style={{ backgroundColor: currentBook.spine_color || "#3C1518" }}
+                  >
+                    <p className="font-serif text-cream text-xs text-center leading-tight">{currentBook.title}</p>
+                  </div>
                 )}
                 <div className="min-w-0">
                   <h2 className="font-serif text-xl text-charcoal mb-1 leading-tight">
@@ -197,17 +205,15 @@ export default function Home() {
         )}
       </div>
 
-      <div className={`grid grid-cols-2 ${stats.totalPages !== null ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4 mb-8`}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalBooks}</p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Books Read</p>
         </div>
-        {stats.totalPages !== null && (
-          <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-            <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalPages.toLocaleString()}</p>
-            <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
-          </div>
-        )}
+        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
+          <p className="font-serif text-3xl text-mahogany font-bold">{(stats.totalPages ?? 0).toLocaleString()}</p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
+        </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalMembers}</p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Members</p>
@@ -220,35 +226,6 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Link
-          href="/shelf"
-          className="group bg-white/50 rounded-xl border border-cream-dark p-6 hover:border-gold/50 hover:shadow-md transition-all"
-        >
-          <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
-            The Shelf
-          </h3>
-          <p className="font-sans text-sm text-warm-brown/60">Browse the collection</p>
-        </Link>
-        <Link
-          href="/calendar"
-          className="group bg-white/50 rounded-xl border border-cream-dark p-6 hover:border-gold/50 hover:shadow-md transition-all"
-        >
-          <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
-            Calendar
-          </h3>
-          <p className="font-sans text-sm text-warm-brown/60">Upcoming gatherings</p>
-        </Link>
-        <Link
-          href="/members"
-          className="group bg-white/50 rounded-xl border border-cream-dark p-6 hover:border-gold/50 hover:shadow-md transition-all"
-        >
-          <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
-            Members
-          </h3>
-          <p className="font-sans text-sm text-warm-brown/60">Meet the readers</p>
-        </Link>
-      </div>
     </div>
   );
 }
