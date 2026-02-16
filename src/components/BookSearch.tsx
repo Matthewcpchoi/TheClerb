@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { searchBooks, getBookCoverUrl, getThumbnailUrl } from "@/lib/google-books";
 import { extractDominantColor } from "@/lib/color-extract";
 import { supabase } from "@/lib/supabase";
@@ -21,14 +21,37 @@ export default function BookSearch({
   const [results, setResults] = useState<GoogleBooksResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isAdding, setIsAdding] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  async function handleSearch() {
-    if (!query.trim()) return;
+  // Debounced search-as-you-type
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    if (!query.trim()) {
+      setResults([]);
+      setHasSearched(false);
+      return;
+    }
+
+    if (query.trim().length < 2) return;
+
     setIsSearching(true);
-    const data = await searchBooks(query);
-    setResults(data);
-    setIsSearching(false);
-  }
+    debounceRef.current = setTimeout(async () => {
+      const data = await searchBooks(query);
+      setResults(data);
+      setIsSearching(false);
+      setHasSearched(true);
+    }, 350);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [query]);
 
   async function handleSelectBook(result: GoogleBooksResult) {
     setIsAdding(result.id);
@@ -44,21 +67,35 @@ export default function BookSearch({
       }
     }
 
-    const { data, error } = await supabase
+    const bookData: Record<string, unknown> = {
+      title: result.volumeInfo.title,
+      author: result.volumeInfo.authors?.join(", ") || null,
+      cover_url: coverUrl,
+      thumbnail_url: thumbnailUrl,
+      spine_color: spineColor,
+      google_books_id: result.id,
+      status: "upcoming",
+      added_by: memberId,
+    };
+    if (result.volumeInfo.pageCount) {
+      bookData.page_count = result.volumeInfo.pageCount;
+    }
+
+    let { data, error } = await supabase
       .from("books")
-      .insert({
-        title: result.volumeInfo.title,
-        author: result.volumeInfo.authors?.join(", ") || null,
-        cover_url: coverUrl,
-        thumbnail_url: thumbnailUrl,
-        spine_color: spineColor,
-        google_books_id: result.id,
-        total_pages: result.volumeInfo.pageCount || null,
-        status: "upcoming",
-        added_by: memberId,
-      })
+      .insert(bookData)
       .select()
       .single();
+
+    // If page_count column doesn't exist, retry without it
+    if (error && bookData.page_count) {
+      delete bookData.page_count;
+      ({ data, error } = await supabase
+        .from("books")
+        .insert(bookData)
+        .select()
+        .single());
+    }
 
     if (data && !error) {
       onBookAdded(data);
@@ -91,30 +128,32 @@ export default function BookSearch({
           </button>
         </div>
 
-        <div className="p-6">
-          <div className="flex gap-2">
+        <div className="p-6 pb-3">
+          <div className="relative">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Search by title or author..."
-              className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-white font-sans text-charcoal placeholder:text-warm-brown/50 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+              placeholder="Start typing a title or author..."
+              className="w-full px-4 py-3 pr-10 rounded-lg border border-cream-dark bg-white font-sans text-charcoal placeholder:text-warm-brown/50 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold"
               autoFocus
             />
-            <button
-              onClick={handleSearch}
-              disabled={isSearching}
-              className="px-5 py-3 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors disabled:opacity-50"
-            >
-              {isSearching ? "..." : "Search"}
-            </button>
+            {isSearching && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="w-5 h-5 border-2 border-gold/30 border-t-gold rounded-full animate-spin" />
+              </div>
+            )}
           </div>
+          {query.trim().length > 0 && query.trim().length < 2 && (
+            <p className="text-xs text-warm-brown/50 font-sans mt-2">
+              Keep typing to search...
+            </p>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           {results.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {results.map((result) => (
                 <button
                   key={result.id}
@@ -130,11 +169,16 @@ export default function BookSearch({
                       )}
                       alt={result.volumeInfo.title}
                       className="w-12 h-18 object-cover rounded shadow flex-shrink-0"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-12 h-16 bg-mahogany/20 rounded flex-shrink-0" />
+                    <div className="w-12 h-16 bg-mahogany/20 rounded flex-shrink-0 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-mahogany/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                    </div>
                   )}
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-serif text-sm text-charcoal font-semibold truncate">
                       {result.volumeInfo.title}
                     </p>
@@ -159,7 +203,7 @@ export default function BookSearch({
             </div>
           )}
 
-          {results.length === 0 && !isSearching && query && (
+          {results.length === 0 && !isSearching && hasSearched && (
             <p className="text-center text-warm-brown/60 font-sans text-sm py-8">
               No results found. Try a different search.
             </p>

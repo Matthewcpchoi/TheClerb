@@ -16,6 +16,8 @@ export interface Book {
   total_pages: number | null;
   status: "reading" | "completed" | "upcoming";
   added_by: string | null;
+  page_count: number | null;
+  completed_at: string | null;
   created_at: string;
 }
 

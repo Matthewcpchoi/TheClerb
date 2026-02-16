@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Book } from "@/types";
+import { Book, Meeting } from "@/types";
+import { formatDate, formatTime } from "@/lib/utils";
 import Link from "next/link";
 
 export default function Home() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
+  const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalMembers: 0,
+    avgRating: null as number | null,
     totalPages: 0,
-    lastAvgRating: null as number | null,
   });
 
   useEffect(() => {
@@ -28,6 +30,17 @@ export default function Home() {
       .single();
     if (reading) setCurrentBook(reading);
 
+    // Fetch next upcoming meeting
+    const now = new Date().toISOString().split("T")[0];
+    const { data: meetings } = await supabase
+      .from("meetings")
+      .select("*, book:books(*)")
+      .gte("date", now)
+      .order("date", { ascending: true })
+      .order("time", { ascending: true })
+      .limit(1);
+    if (meetings && meetings.length > 0) setNextMeeting(meetings[0]);
+
     // Fetch stats
     const { count: bookCount } = await supabase
       .from("books")
@@ -38,47 +51,37 @@ export default function Home() {
       .from("members")
       .select("*", { count: "exact", head: true });
 
-    // Fetch total pages from completed books
-    const { data: completedBooks } = await supabase
+    // Total pages across all books (completed + reading)
+    const { data: allBooks } = await supabase
       .from("books")
-      .select("total_pages")
-      .eq("status", "completed");
-    const totalPages = (completedBooks || []).reduce(
-      (sum, b) => sum + (b.total_pages || 0),
-      0
-    );
+      .select("page_count")
+      .in("status", ["completed", "reading"]);
 
-    // Get last completed book's avg rating
-    const { data: lastBook } = await supabase
-      .from("books")
-      .select("id")
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
+    const totalPages = allBooks
+      ? allBooks.reduce((sum, b) => sum + (b.page_count || 0), 0)
+      : 0;
 
-    let lastAvg: number | null = null;
-    if (lastBook) {
-      const { data: ratings } = await supabase
-        .from("ratings")
-        .select("post_rating, pre_rating")
-        .eq("book_id", lastBook.id)
-        .eq("is_visible", true);
-      if (ratings && ratings.length > 0) {
-        const vals = ratings
-          .map((r) => r.post_rating ?? r.pre_rating)
-          .filter((v): v is number => v !== null);
-        if (vals.length > 0) {
-          lastAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
-        }
+    // Avg rating across ALL visible ratings
+    const { data: allRatings } = await supabase
+      .from("ratings")
+      .select("pre_rating, post_rating")
+      .eq("is_visible", true);
+
+    let avgRating: number | null = null;
+    if (allRatings && allRatings.length > 0) {
+      const vals = allRatings
+        .map((r) => r.post_rating ?? r.pre_rating)
+        .filter((v): v is number => v !== null);
+      if (vals.length > 0) {
+        avgRating = vals.reduce((a, b) => a + b, 0) / vals.length;
       }
     }
 
     setStats({
       totalBooks: bookCount || 0,
       totalMembers: memberCount || 0,
+      avgRating,
       totalPages,
-      lastAvgRating: lastAvg,
     });
   }
 
@@ -94,54 +97,104 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Currently Reading */}
-      {currentBook && (
-        <Link href={`/book/${currentBook.id}`}>
-          <div className="bg-white/50 rounded-xl border border-cream-dark p-8 mb-8 hover:shadow-lg transition-shadow cursor-pointer">
-            <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-widest mb-4">
-              Currently Reading
-            </p>
-            <div className="flex items-start gap-6">
-              {(currentBook.cover_url || currentBook.thumbnail_url) && (
-                <img
-                  src={currentBook.cover_url || currentBook.thumbnail_url || ""}
-                  alt={currentBook.title}
-                  className="w-28 h-40 object-cover rounded-lg shadow-lg flex-shrink-0"
-                />
-              )}
-              <div>
-                <h2 className="font-serif text-2xl text-charcoal mb-1">
-                  {currentBook.title}
-                </h2>
-                {currentBook.author && (
-                  <p className="font-sans text-warm-brown">
-                    {currentBook.author}
-                  </p>
+      {/* Currently Reading + Next Club — side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {/* Currently Reading */}
+        {currentBook ? (
+          <Link href={`/book/${currentBook.id}`} className="block h-full">
+            <div className="bg-white/50 rounded-xl border border-cream-dark p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+              <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-widest mb-4">
+                Currently Reading
+              </p>
+              <div className="flex items-start gap-4 flex-1">
+                {(currentBook.cover_url || currentBook.thumbnail_url) && (
+                  <img
+                    src={currentBook.cover_url || currentBook.thumbnail_url || ""}
+                    alt={currentBook.title}
+                    className="w-20 h-28 object-cover rounded-lg shadow-lg flex-shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
                 )}
-                {currentBook.total_pages && (
-                  <p className="font-sans text-sm text-warm-brown/60 mt-1">
-                    {currentBook.total_pages.toLocaleString()} pages
-                  </p>
-                )}
+                <div className="min-w-0">
+                  <h2 className="font-serif text-xl text-charcoal mb-1 leading-tight">
+                    {currentBook.title}
+                  </h2>
+                  {currentBook.author && (
+                    <p className="font-sans text-sm text-warm-brown">
+                      {currentBook.author}
+                    </p>
+                  )}
+                  {currentBook.page_count && (
+                    <p className="font-sans text-xs text-warm-brown/50 mt-1">
+                      {currentBook.page_count} pages
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </Link>
-      )}
-
-      {!currentBook && (
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-8 mb-8 text-center">
-          <p className="font-sans text-warm-brown/60 italic">
-            No book currently being read.
-          </p>
-          <Link
-            href="/shelf"
-            className="inline-block mt-3 px-5 py-2 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
-          >
-            Visit The Shelf
           </Link>
-        </div>
-      )}
+        ) : (
+          <div className="bg-white/50 rounded-xl border border-cream-dark p-6 flex flex-col items-center justify-center h-full">
+            <p className="font-sans text-warm-brown/60 italic mb-3">
+              No book currently being read.
+            </p>
+            <Link
+              href="/shelf"
+              className="px-5 py-2 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
+            >
+              Visit The Shelf
+            </Link>
+          </div>
+        )}
+
+        {/* Next Club Meeting */}
+        {nextMeeting ? (
+          <Link href="/calendar" className="block h-full">
+            <div className="bg-white/50 rounded-xl border border-gold/30 p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+              <p className="font-sans text-xs text-gold uppercase tracking-widest mb-4">
+                Next Club
+              </p>
+              <div className="flex items-start gap-4 flex-1">
+                <div className="flex-shrink-0 w-14 h-14 bg-gold/15 rounded-lg flex flex-col items-center justify-center">
+                  <span className="font-serif text-lg text-gold font-bold leading-none">
+                    {new Date(nextMeeting.date + "T00:00:00").getDate()}
+                  </span>
+                  <span className="font-sans text-[10px] text-gold/70 uppercase">
+                    {new Date(nextMeeting.date + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-serif text-lg text-charcoal leading-tight">
+                    {nextMeeting.title}
+                  </h3>
+                  <p className="font-sans text-sm text-warm-brown/70 mt-1">
+                    {formatDate(nextMeeting.date)}
+                  </p>
+                  <p className="font-sans text-sm text-warm-brown/70">
+                    {formatTime(nextMeeting.time)}
+                  </p>
+                  {nextMeeting.location && (
+                    <p className="font-sans text-sm text-warm-brown/50 mt-0.5">
+                      {nextMeeting.location}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Link>
+        ) : (
+          <Link href="/calendar" className="block h-full">
+            <div className="bg-white/50 rounded-xl border border-cream-dark p-6 flex flex-col items-center justify-center h-full hover:shadow-lg transition-shadow cursor-pointer">
+              <p className="font-sans text-warm-brown/60 italic mb-3">
+                No upcoming meetings.
+              </p>
+              <span className="px-5 py-2 rounded-lg bg-gold/20 text-gold font-sans text-sm">
+                Schedule One
+              </span>
+            </div>
+          </Link>
+        )}
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -169,12 +222,20 @@ export default function Home() {
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-gold font-bold">
-            {stats.lastAvgRating !== null
-              ? stats.lastAvgRating.toFixed(1)
-              : "—"}
+            {stats.avgRating !== null
+              ? stats.avgRating.toFixed(1)
+              : "\u2014"}
           </p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Last Avg Rating
+            Avg Rating
+          </p>
+        </div>
+        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
+          <p className="font-serif text-3xl text-mahogany font-bold">
+            {stats.totalPages > 0 ? stats.totalPages.toLocaleString() : "\u2014"}
+          </p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">
+            Total Pages
           </p>
         </div>
       </div>

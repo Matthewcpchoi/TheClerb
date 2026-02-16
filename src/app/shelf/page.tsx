@@ -75,12 +75,14 @@ export default function ShelfPage() {
   }
 
   async function handleStatusChange(bookId: string, status: Book["status"]) {
-    // If setting to "reading", first set all current reading books to "upcoming"
     if (status === "reading") {
-      await supabase
-        .from("books")
-        .update({ status: "completed" })
-        .eq("status", "reading");
+      const currentlyReading = books.find((b) => b.status === "reading");
+      if (currentlyReading) {
+        await supabase
+          .from("books")
+          .update({ status: "completed" })
+          .eq("id", currentlyReading.id);
+      }
     }
 
     await supabase.from("books").update({ status }).eq("id", bookId);
@@ -128,6 +130,7 @@ export default function ShelfPage() {
                     src={book.thumbnail_url || book.cover_url || ""}
                     alt={book.title}
                     className="w-12 h-16 object-cover rounded shadow-sm flex-shrink-0"
+                    referrerPolicy="no-referrer"
                   />
                 )}
                 <div className="min-w-0 flex-1">

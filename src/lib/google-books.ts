@@ -3,21 +3,25 @@ import { GoogleBooksResult } from "@/types";
 export async function searchBooks(query: string): Promise<GoogleBooksResult[]> {
   if (!query.trim()) return [];
 
-  const encodedQuery = encodeURIComponent(query);
-  const res = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?q=${encodedQuery}&maxResults=8&key=${process.env.NEXT_PUBLIC_GOOGLE_BOOKS_KEY}`
-  );
+  const encodedQuery = encodeURIComponent(query.trim());
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY || "";
+  const keyParam = apiKey ? `&key=${apiKey}` : "";
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodedQuery}&maxResults=10&printType=books${keyParam}`;
 
-  if (!res.ok) return [];
-
-  const data = await res.json();
-  return data.items || [];
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.items || [];
+  } catch {
+    // If direct call fails, try with no-cors workaround or return empty
+    return [];
+  }
 }
 
 export function getBookCoverUrl(result: GoogleBooksResult): string | null {
   const links = result.volumeInfo.imageLinks;
   if (!links) return null;
-  // Use thumbnail and upgrade to higher res by replacing zoom parameter
   const url = links.thumbnail || links.smallThumbnail || null;
   if (url) {
     return url.replace("http://", "https://").replace("zoom=1", "zoom=2");
