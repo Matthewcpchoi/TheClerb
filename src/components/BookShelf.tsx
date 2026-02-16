@@ -2,6 +2,7 @@
 
 import { Book } from "@/types";
 import Link from "next/link";
+import { useState } from "react";
 
 interface BookShelfProps {
   currentBook: Book | null;
@@ -20,6 +21,9 @@ function BookcaseSide() {
 }
 
 function BookTile({ book, score }: { book: Book; score?: number }) {
+  const [imageSrc, setImageSrc] = useState(book.thumbnail_url || book.cover_url || "");
+  const hasPageCount = typeof book.page_count === "number";
+
   return (
     <Link href={`/book/${book.id}`} className="block flex-shrink-0">
       <div className="text-center w-24">
@@ -30,12 +34,19 @@ function BookTile({ book, score }: { book: Book; score?: number }) {
             transformOrigin: "left center",
           }}
         >
-          {book.cover_url || book.thumbnail_url ? (
+          {imageSrc ? (
             <img
-              src={book.thumbnail_url || book.cover_url || ""}
+              src={imageSrc}
               alt={book.title}
               className="w-24 h-36 object-cover rounded shadow-lg"
               referrerPolicy="no-referrer"
+              onError={() => {
+                if (imageSrc !== (book.cover_url || "")) {
+                  setImageSrc(book.cover_url || "");
+                } else {
+                  setImageSrc("");
+                }
+              }}
             />
           ) : (
             <div
@@ -47,10 +58,8 @@ function BookTile({ book, score }: { book: Book; score?: number }) {
           )}
           <div className="absolute inset-0 rounded bg-gradient-to-r from-black/10 to-transparent pointer-events-none" />
         </div>
-        <p className="font-serif text-sm text-charcoal mt-2 truncate">{book.title}</p>
-        <p className="font-sans text-xs text-warm-brown/70 truncate">
-          {book.page_count !== null ? `${book.page_count} pages` : "Pages unknown"}
-        </p>
+        <p className="font-serif text-sm text-charcoal mt-2 line-clamp-2 min-h-10">{book.title}</p>
+        {hasPageCount && <p className="font-sans text-xs text-warm-brown/70 truncate">{book.page_count} pages</p>}
         <p className="font-serif text-base text-gold mt-0.5 font-semibold">
           {score !== undefined ? `★ ${score.toFixed(1)}` : "—"}
         </p>
@@ -67,14 +76,14 @@ export default function BookShelf({
   bookRatings,
 }: BookShelfProps) {
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto w-full">
       <div className="rounded-lg overflow-hidden shadow-xl">
         <div className="bookcase-top rounded-t-lg" />
         <div className="flex">
           <BookcaseSide />
 
           <div className="flex-1 space-y-0">
-            <div className="shelf-back px-4 pt-4 pb-2 min-h-[260px]">
+            <div className="shelf-back px-3 sm:px-4 pt-4 pb-2 min-h-[220px] sm:min-h-[260px]">
               {currentBook ? (
                 <div>
                   <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-wider mb-3">
@@ -92,7 +101,7 @@ export default function BookShelf({
             </div>
             <WoodShelf />
 
-            <div className="shelf-back px-4 pt-4 pb-2 min-h-[260px]">
+            <div className="shelf-back px-3 sm:px-4 pt-4 pb-2 min-h-[220px] sm:min-h-[260px]">
               {completedBooks.length > 0 ? (
                 <>
                   <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-wider mb-3">Past Reads</p>
@@ -110,16 +119,17 @@ export default function BookShelf({
             </div>
             <WoodShelf />
 
-            <div className="shelf-back px-4 pt-4 pb-2 min-h-[240px]">
+            <div className="shelf-back px-3 sm:px-4 pt-4 pb-2 min-h-[220px] sm:min-h-[240px]">
               <div className="flex items-end">
                 <div className="flex-1 flex flex-col items-center">
                   {hallOfFame ? (
                     <Link href={`/book/${hallOfFame.id}`} className="block">
                       <div className="text-center cursor-pointer">
+                        <p className="font-serif text-sm text-yellow-400 font-semibold text-center mb-2">Hall of Fame</p>
                         <div className="gold-shimmer rounded-lg inline-block">
                           {hallOfFame.cover_url || hallOfFame.thumbnail_url ? (
                             <img
-                              src={hallOfFame.cover_url || hallOfFame.thumbnail_url || ""}
+                              src={hallOfFame.thumbnail_url || hallOfFame.cover_url || ""}
                               alt={hallOfFame.title}
                               className="w-24 h-36 object-cover rounded shadow-lg"
                               referrerPolicy="no-referrer"
@@ -130,8 +140,7 @@ export default function BookShelf({
                             </div>
                           )}
                         </div>
-                        <div className="mt-2 bg-gold/20 border border-gold/40 rounded px-3 py-1.5 inline-block">
-                          <p className="font-serif text-xs text-gold">Hall of Fame</p>
+                        <div className="mt-2 bg-gold/20 border border-gold/40 rounded px-3 py-1.5 inline-block text-center">
                           <p className="font-sans text-xs text-mahogany font-semibold">{hallOfFame.avgRating.toFixed(1)}</p>
                         </div>
                       </div>
@@ -147,10 +156,11 @@ export default function BookShelf({
                   {hallOfShame ? (
                     <Link href={`/book/${hallOfShame.id}`} className="block">
                       <div className="text-center cursor-pointer">
+                        <p className="font-serif text-sm text-red-900 font-semibold text-center mb-2">Hall of Shame</p>
                         <div className="rounded-lg inline-block relative">
                           {hallOfShame.cover_url || hallOfShame.thumbnail_url ? (
                             <img
-                              src={hallOfShame.cover_url || hallOfShame.thumbnail_url || ""}
+                              src={hallOfShame.thumbnail_url || hallOfShame.cover_url || ""}
                               alt={hallOfShame.title}
                               className="w-24 h-36 object-cover rounded shadow-lg"
                               style={{ filter: "saturate(0.5) brightness(0.85)" }}
@@ -165,8 +175,7 @@ export default function BookShelf({
                             </div>
                           )}
                         </div>
-                        <div className="mt-2 bg-charcoal/5 border border-charcoal/10 rounded px-3 py-1.5 inline-block">
-                          <p className="font-serif text-xs text-warm-brown/60 italic">Hall of Shame</p>
+                        <div className="mt-2 bg-charcoal/5 border border-charcoal/10 rounded px-3 py-1.5 inline-block text-center">
                           <p className="font-sans text-xs text-charcoal font-semibold">{hallOfShame.avgRating.toFixed(1)}</p>
                         </div>
                       </div>

@@ -48,3 +48,9 @@ export function formatTime(timeString: string): string {
 export function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
+
+export function getExactPageCount(book: { page_count?: number | null; total_pages?: number | null }): number {
+  if (typeof book.page_count === "number") return book.page_count;
+  if (typeof book.total_pages === "number") return book.total_pages;
+  return 0;
+}

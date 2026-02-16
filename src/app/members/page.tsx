@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Member, Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
-import { getInitials, getAvatarColor } from "@/lib/utils";
+import { getInitials, getAvatarColor, getExactPageCount } from "@/lib/utils";
 
 interface MemberRatingRow {
   member_id: string;
@@ -50,7 +50,7 @@ async function fetchMemberStats(members: Member[], completedBooks: Book[]) {
     const ratedBookIds = new Set(scoreRows.map((r) => r.book_id));
     const pagesRead = completedBooks
       .filter((b) => ratedBookIds.has(b.id))
-      .reduce((sum, b) => sum + (b.page_count || 0), 0);
+      .reduce((sum, b) => sum + getExactPageCount(b), 0);
 
     const { count: attended } = await supabase
       .from("attendance")
@@ -58,14 +58,6 @@ async function fetchMemberStats(members: Member[], completedBooks: Book[]) {
       .eq("member_id", member.id)
       .eq("status", "going");
 
-    const uniqueBooks = new Map<string, MemberBook>();
-    for (const b of ratedBooks) {
-      if (!uniqueBooks.has(b.id)) uniqueBooks.set(b.id, b);
-    }
-    const totalPagesRead = Array.from(uniqueBooks.values()).reduce(
-      (sum, b) => sum + (b.page_count || 0),
-      0
-    );
 
     statsMap[member.id] = {
       booksRead: ratedBookIds.size,

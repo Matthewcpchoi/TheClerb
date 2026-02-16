@@ -84,12 +84,12 @@ export default function Navigation() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-1 px-3 rounded-lg transition-colors",
+                  "flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-colors",
                   isActive ? "text-mahogany" : "text-warm-brown"
                 )}
               >
                 <NavIcon icon={item.icon} className="w-5 h-5" />
-                <span className="text-xs font-sans">{item.label}</span>
+                <span className="sr-only">{item.label}</span>
               </Link>
             );
           })}
