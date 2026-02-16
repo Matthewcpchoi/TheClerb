@@ -10,10 +10,9 @@ interface BookShelfProps {
   completedBooks: Book[];
   hallOfFame: (Book & { avgRating: number }) | null;
   hallOfShame: (Book & { avgRating: number }) | null;
-  bookRatings: Record<string, number>;
 }
 
-function BookTile({ book, score }: { book: Book; score?: number }) {
+function BookTile({ book }: { book: Book }) {
   const imageSources = useMemo(() => getBookCoverCandidates(book), [book]);
   const [imageIndex, setImageIndex] = useState(0);
   const imageSrc = imageSources[imageIndex] || "";
@@ -44,9 +43,6 @@ function BookTile({ book, score }: { book: Book; score?: number }) {
         {typeof pageCount === "number" && (
           <p className="font-sans text-xs text-cream/80 truncate">{pageCount} pages</p>
         )}
-        <p className="font-serif text-sm text-gold mt-0.5 font-semibold">
-          {score !== undefined ? `★ ${score.toFixed(1)}` : "—"}
-        </p>
       </div>
     </Link>
   );
@@ -103,9 +99,7 @@ function FeaturedBook({
           <p className="font-serif text-cream text-xs text-center">{book.title}</p>
         </div>
       </div>
-      <p className="font-serif text-sm text-gold mt-2 font-semibold">
-        ★ {(score ?? book.avgRating).toFixed(1)}
-      </p>
+      <p className="font-serif text-sm text-gold mt-2 font-semibold">{(score ?? book.avgRating).toFixed(1)}</p>
     </Link>
   );
 }
@@ -114,8 +108,7 @@ export default function BookShelf({
   currentBook,
   completedBooks,
   hallOfFame,
-  hallOfShame,
-  bookRatings,
+  hallOfShame
 }: BookShelfProps) {
   const emptyCurrentReadTile = useMemo(
     () => (
@@ -142,7 +135,7 @@ export default function BookShelf({
               </p>
               <div className="relative z-10 h-full flex items-end justify-center pt-10">
                 <div className="flex items-end justify-center pb-2">
-                  {currentBook ? <BookTile book={currentBook} score={bookRatings[currentBook.id]} /> : emptyCurrentReadTile}
+                  {currentBook ? <BookTile book={currentBook} /> : emptyCurrentReadTile}
                 </div>
               </div>
             </section>
@@ -152,7 +145,7 @@ export default function BookShelf({
               <p className="font-serif text-sm sm:text-base tracking-wide text-cream/90 mb-3">PAST READS</p>
               <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ WebkitOverflowScrolling: "touch" }}>
                 {completedBooks.map((book) => (
-                  <BookTile key={book.id} book={book} score={bookRatings[book.id]} />
+                  <BookTile key={book.id} book={book} />
                 ))}
               </div>
             </section>
