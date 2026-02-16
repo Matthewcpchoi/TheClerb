@@ -23,22 +23,22 @@ function BookTile({ book, score }: { book: Book; score?: number }) {
     <Link href={`/book/${book.id}`} className="block flex-shrink-0">
       <div className="text-center w-24 sm:w-28">
         <div className="relative cursor-pointer transition-transform duration-200 hover:-translate-y-1 mx-auto">
-          {imageSrc ? (
-            <img
-              src={imageSrc}
-              alt={book.title}
-              className="w-24 h-36 sm:w-28 sm:h-40 object-cover rounded shadow-lg"
-              referrerPolicy="no-referrer"
-              onError={() => setImageIndex((prev) => prev + 1)}
-            />
-          ) : (
-            <div
-              className="w-24 h-36 sm:w-28 sm:h-40 rounded shadow-lg flex items-center justify-center p-2"
-              style={{ backgroundColor: book.spine_color || "#3C1518" }}
-            >
-              <p className="font-serif text-cream text-xs text-center leading-tight">{book.title}</p>
-            </div>
-          )}
+          <div
+            className="w-24 h-36 sm:w-28 sm:h-40 rounded shadow-lg flex items-center justify-center p-2"
+            style={{ backgroundColor: book.spine_color || "#3C1518" }}
+          >
+            {imageSrc ? (
+              <img
+                src={imageSrc}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover rounded"
+                style={{ color: "transparent" }}
+                referrerPolicy="no-referrer"
+                onError={() => setImageIndex((prev) => prev + 1)}
+              />
+            ) : null}
+            <p className="font-serif text-cream text-xs text-center leading-tight">{book.title}</p>
+          </div>
         </div>
         <p className="font-serif text-sm text-cream mt-2 line-clamp-2 min-h-10">{book.title}</p>
         {typeof pageCount === "number" && (
@@ -55,13 +55,11 @@ function BookTile({ book, score }: { book: Book; score?: number }) {
 function FeaturedBook({
   book,
   title,
-  titleClassName,
   score,
   dim,
 }: {
   book: (Book & { avgRating: number }) | null;
   title: string;
-  titleClassName: string;
   score?: number;
   dim?: boolean;
 }) {
@@ -73,31 +71,41 @@ function FeaturedBook({
   const imageSrc = imageSources[imageIndex] || "";
 
   if (!book) {
-    return <p className="text-xs text-cream/60 font-sans italic">No ratings yet</p>;
+    return (
+      <div className="text-center">
+        <p className="font-serif text-sm tracking-wide mb-2 text-cream/95">{title}</p>
+        <p className="text-xs text-cream/60 font-sans italic">No ratings yet</p>
+      </div>
+    );
   }
 
   return (
     <Link href={`/book/${book.id}`} className="block text-center">
-      <p className={`font-serif text-base sm:text-lg tracking-wide mb-2 ${titleClassName}`}>{title}</p>
-      <div className="inline-block">
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt={book.title}
-            className="w-20 h-28 sm:w-24 sm:h-36 object-cover rounded shadow-xl"
-            style={dim ? { filter: "saturate(0.65) brightness(0.85)" } : undefined}
-            referrerPolicy="no-referrer"
-            onError={() => setImageIndex((prev) => prev + 1)}
-          />
-        ) : (
-          <div className="w-20 h-28 sm:w-24 sm:h-36 bg-mahogany rounded shadow-xl flex items-center justify-center p-2">
-            <p className="font-serif text-cream text-xs text-center">{book.title}</p>
-          </div>
-        )}
+      <p className="font-serif text-sm tracking-wide mb-2 text-cream/95">{title}</p>
+      <div className="inline-block relative">
+        <div
+          className="w-20 h-28 sm:w-24 sm:h-36 rounded shadow-xl flex items-center justify-center p-2"
+          style={{
+            backgroundColor: book.spine_color || "#3C1518",
+            ...(dim ? { filter: "saturate(0.65) brightness(0.85)" } : {}),
+          }}
+        >
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover rounded"
+              style={{ color: "transparent", ...(dim ? { filter: "saturate(0.65) brightness(0.85)" } : {}) }}
+              referrerPolicy="no-referrer"
+              onError={() => setImageIndex((prev) => prev + 1)}
+            />
+          ) : null}
+          <p className="font-serif text-cream text-xs text-center">{book.title}</p>
+        </div>
       </div>
-      <div className="mt-2 rounded px-2 py-1 inline-block bg-black/20 border border-white/10">
-        <p className="font-sans text-xs text-cream/90 font-semibold">{(score ?? book.avgRating).toFixed(1)}</p>
-      </div>
+      <p className="font-serif text-sm text-gold mt-2 font-semibold">
+        ★ {(score ?? book.avgRating).toFixed(1)}
+      </p>
     </Link>
   );
 }
@@ -128,12 +136,12 @@ export default function BookShelf({
           <div className="bookcase-side rounded-sm hidden sm:block" />
 
           <div className="flex-1 min-w-0">
-            <section className="shelf-back relative px-3 sm:px-5 py-4 sm:py-5 min-h-[260px] sm:min-h-[300px]">
-              <p className="absolute top-3 left-3 sm:top-4 sm:left-5 font-serif text-lg sm:text-xl tracking-wide text-cream/95 z-10">
+            <section className="shelf-back relative px-3 sm:px-5 py-3 sm:py-4 min-h-[220px] sm:min-h-[250px]">
+              <p className="absolute top-3 left-3 sm:top-4 sm:left-5 font-serif text-sm sm:text-base tracking-wide text-cream/95 z-10">
                 CURRENTLY READING
               </p>
               <div className="shelf-spotlight" />
-              <div className="relative z-10 h-full flex items-end justify-center pt-12">
+              <div className="relative z-10 h-full flex items-end justify-center pt-10">
                 <div className="flex items-end justify-center pb-2">
                   {currentBook ? <BookTile book={currentBook} score={bookRatings[currentBook.id]} /> : emptyCurrentReadTile}
                 </div>
@@ -141,8 +149,8 @@ export default function BookShelf({
             </section>
             <div className="wood-shelf rounded-sm" />
 
-            <section className="shelf-back px-3 sm:px-5 py-4 sm:py-5 min-h-[260px] sm:min-h-[300px]">
-              <p className="font-serif text-xl sm:text-2xl tracking-wide text-cream/90 mb-3">PAST READS</p>
+            <section className="shelf-back px-3 sm:px-5 py-3 sm:py-4 min-h-[220px] sm:min-h-[250px]">
+              <p className="font-serif text-sm sm:text-base tracking-wide text-cream/90 mb-3">PAST READS</p>
               <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ WebkitOverflowScrolling: "touch" }}>
                 {completedBooks.map((book) => (
                   <BookTile key={book.id} book={book} score={bookRatings[book.id]} />
@@ -151,24 +159,20 @@ export default function BookShelf({
             </section>
             <div className="wood-shelf rounded-sm" />
 
-            <section className="shelf-back px-3 sm:px-5 py-4 sm:py-5 min-h-[230px] sm:min-h-[250px]">
-              <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-4 sm:gap-6">
+            <section className="shelf-back px-3 sm:px-5 py-3 sm:py-4 min-h-[200px] sm:min-h-[220px]">
+              <div className="flex flex-row items-start justify-around gap-4">
                 <div className="flex-1 flex justify-center">
                   <FeaturedBook
                     book={hallOfFame}
                     title="HALL OF FAME"
-                    titleClassName="text-yellow-300"
                     score={hallOfFame?.avgRating}
                   />
                 </div>
-
-                <div className="h-px w-40 sm:w-px sm:h-36 bg-cream/40 self-center" />
 
                 <div className="flex-1 flex justify-center">
                   <FeaturedBook
                     book={hallOfShame}
                     title="HALL OF SHAME"
-                    titleClassName="text-red-900"
                     score={hallOfShame?.avgRating}
                     dim
                   />
