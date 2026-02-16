@@ -146,3 +146,10 @@ The app uses a "Warm Bookstore" design language:
 - Realistic 3D book spines with CSS effects
 - Wooden bookshelf with multi-tier layout
 - Subtle paper textures and warm shadows
+
+## Additional Documentation
+
+- [Contributing Guide](./CONTRIBUTING.md)
+- [Architecture Overview](./ARCHITECTURE.md)
+- [Database Notes](./DATABASE.md)
+- [Project Memory](./docs/PROJECT_MEMORY.md)
