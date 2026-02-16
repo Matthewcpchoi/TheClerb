@@ -28,8 +28,9 @@ export default function DiscussionTopics({
   }, [bookId]);
 
   function handleReveal() {
-    setRevealed(true);
-    localStorage.setItem(`topics-revealed-${bookId}`, "true");
+    const next = !revealed;
+    setRevealed(next);
+    localStorage.setItem(`topics-revealed-${bookId}`, next ? "true" : "false");
   }
 
   function handleSubmit() {
@@ -45,12 +46,14 @@ export default function DiscussionTopics({
         <h3 className="font-serif text-lg text-charcoal">
           Discussion Topics
         </h3>
-        {!revealed && topics.length > 0 && (
+        {topics.length > 0 && (
           <button
             onClick={handleReveal}
             className="px-4 py-2 rounded-lg bg-espresso/10 text-espresso font-sans text-sm hover:bg-espresso/20 transition-colors"
           >
-            Reveal {topics.length} topic{topics.length !== 1 ? "s" : ""}
+            {revealed
+              ? "Hide topics"
+              : `Reveal ${topics.length} topic${topics.length !== 1 ? "s" : ""}`}
           </button>
         )}
       </div>

@@ -8,6 +8,7 @@ interface BookShelfProps {
   completedBooks: Book[];
   hallOfFame: (Book & { avgRating: number }) | null;
   hallOfShame: (Book & { avgRating: number }) | null;
+  bookRatings: Record<string, number>;
 }
 
 function WoodShelf() {
@@ -23,17 +24,16 @@ export default function BookShelf({
   completedBooks,
   hallOfFame,
   hallOfShame,
+  bookRatings,
 }: BookShelfProps) {
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Bookcase frame */}
       <div className="rounded-lg overflow-hidden shadow-xl">
         <div className="bookcase-top rounded-t-lg" />
         <div className="flex">
           <BookcaseSide />
 
           <div className="flex-1 space-y-0">
-            {/* Tier 1: Currently Reading — Featured Display */}
             <div className="shelf-back px-4 pt-6 pb-2 min-h-[280px] flex items-end justify-center">
               {currentBook ? (
                 <div className="flex items-end gap-6 mb-2">
@@ -108,109 +108,64 @@ export default function BookShelf({
             </div>
             <WoodShelf />
 
-            {/* Tier 2 & 3: Completed Books — Cover Display */}
-            {(() => {
-              const midpoint = Math.ceil(completedBooks.length / 2);
-              const tier2 = completedBooks.slice(0, midpoint);
-              const tier3 = completedBooks.slice(midpoint);
-              return (
+            <div className="shelf-back px-4 pt-4 pb-2 min-h-[260px]">
+              {completedBooks.length > 0 ? (
                 <>
-                  <div className="shelf-back px-4 pt-4 pb-2 min-h-[260px]">
-                    {tier2.length > 0 ? (
-                      <>
-                        <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-wider mb-3">
-                          Past Reads
-                        </p>
-                        <div className="flex items-end gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                          {tier2.map((book) => (
-                            <Link key={book.id} href={`/book/${book.id}`} className="block flex-shrink-0">
+                  <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-wider mb-3">
+                    Past Reads
+                  </p>
+                  <div className="flex items-end gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                    {completedBooks.map((book) => (
+                      <Link key={book.id} href={`/book/${book.id}`} className="block flex-shrink-0">
+                        <div className="text-center">
+                          <div
+                            className="relative cursor-pointer transition-transform duration-200 hover:-translate-y-1"
+                            style={{
+                              transform: "perspective(400px) rotateY(-3deg)",
+                              transformOrigin: "left center",
+                            }}
+                          >
+                            {book.cover_url || book.thumbnail_url ? (
+                              <img
+                                src={book.thumbnail_url || book.cover_url || ""}
+                                alt={book.title}
+                                className="w-20 h-28 object-cover rounded shadow-lg"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
                               <div
-                                className="relative cursor-pointer transition-transform duration-200 hover:-translate-y-1"
-                                style={{
-                                  transform: "perspective(400px) rotateY(-3deg)",
-                                  transformOrigin: "left center",
-                                }}
+                                className="w-20 h-28 rounded shadow-lg flex items-center justify-center p-2"
+                                style={{ backgroundColor: book.spine_color || "#3C1518" }}
                               >
-                                {book.cover_url || book.thumbnail_url ? (
-                                  <img
-                                    src={book.thumbnail_url || book.cover_url || ""}
-                                    alt={book.title}
-                                    className="w-20 h-28 object-cover rounded shadow-lg"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  <div
-                                    className="w-20 h-28 rounded shadow-lg flex items-center justify-center p-2"
-                                    style={{ backgroundColor: book.spine_color || "#3C1518" }}
-                                  >
-                                    <p className="font-serif text-cream text-[10px] text-center leading-tight">
-                                      {book.title}
-                                    </p>
-                                  </div>
-                                )}
-                                <div className="absolute inset-0 rounded bg-gradient-to-r from-black/10 to-transparent pointer-events-none" />
+                                <p className="font-serif text-cream text-[10px] text-center leading-tight">
+                                  {book.title}
+                                </p>
                               </div>
-                            </Link>
-                          ))}
+                            )}
+                            <div className="absolute inset-0 rounded bg-gradient-to-r from-black/10 to-transparent pointer-events-none" />
+                          </div>
+                          <p className="font-sans text-[10px] text-gold mt-1">
+                            {bookRatings[book.id] !== undefined
+                              ? `★ ${bookRatings[book.id].toFixed(1)}`
+                              : "—"}
+                          </p>
                         </div>
-                      </>
-                    ) : (
-                      <div className="flex items-center justify-center h-full min-h-[200px]">
-                        <p className="font-sans text-sm text-warm-brown/40 italic">
-                          Completed books will appear here
-                        </p>
-                      </div>
-                    )}
+                      </Link>
+                    ))}
                   </div>
-                  <WoodShelf />
-
-                  {tier3.length > 0 && (
-                    <>
-                      <div className="shelf-back px-4 pt-4 pb-2 min-h-[260px]">
-                        <div className="flex items-end gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                          {tier3.map((book) => (
-                            <Link key={book.id} href={`/book/${book.id}`} className="block flex-shrink-0">
-                              <div
-                                className="relative cursor-pointer transition-transform duration-200 hover:-translate-y-1"
-                                style={{
-                                  transform: "perspective(400px) rotateY(-3deg)",
-                                  transformOrigin: "left center",
-                                }}
-                              >
-                                {book.cover_url || book.thumbnail_url ? (
-                                  <img
-                                    src={book.thumbnail_url || book.cover_url || ""}
-                                    alt={book.title}
-                                    className="w-20 h-28 object-cover rounded shadow-lg"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  <div
-                                    className="w-20 h-28 rounded shadow-lg flex items-center justify-center p-2"
-                                    style={{ backgroundColor: book.spine_color || "#3C1518" }}
-                                  >
-                                    <p className="font-serif text-cream text-[10px] text-center leading-tight">
-                                      {book.title}
-                                    </p>
-                                  </div>
-                                )}
-                                <div className="absolute inset-0 rounded bg-gradient-to-r from-black/10 to-transparent pointer-events-none" />
-                              </div>
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                      <WoodShelf />
-                    </>
-                  )}
                 </>
-              );
-            })()}
+              ) : (
+                <div className="flex items-center justify-center h-full min-h-[200px]">
+                  <p className="font-sans text-sm text-warm-brown/40 italic">
+                    Completed books will appear here
+                  </p>
+                </div>
+              )}
+            </div>
+            <WoodShelf />
 
-            {/* Tier 4: Hall of Fame & Hall of Shame */}
             <div className="shelf-back px-4 pt-4 pb-2 min-h-[240px]">
               <div className="flex items-end">
-                {/* Hall of Fame */}
                 <div className="flex-1 flex flex-col items-center">
                   {hallOfFame ? (
                     <Link href={`/book/${hallOfFame.id}`} className="block">
@@ -252,10 +207,8 @@ export default function BookShelf({
                   )}
                 </div>
 
-                {/* Divider / Bookend */}
                 <div className="w-px h-40 bg-warm-brown/20 mx-2 self-center" />
 
-                {/* Hall of Shame */}
                 <div className="flex-1 flex flex-col items-center">
                   {hallOfShame ? (
                     <Link href={`/book/${hallOfShame.id}`} className="block">

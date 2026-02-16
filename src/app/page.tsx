@@ -9,6 +9,7 @@ import Link from "next/link";
 export default function Home() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
+  const [pastBooks, setPastBooks] = useState<Book[]>([]);
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalMembers: 0,
@@ -21,7 +22,6 @@ export default function Home() {
   }, []);
 
   async function fetchData() {
-    // Fetch current book
     const { data: reading } = await supabase
       .from("books")
       .select("*")
@@ -30,7 +30,6 @@ export default function Home() {
       .single();
     if (reading) setCurrentBook(reading);
 
-    // Fetch next upcoming meeting
     const now = new Date().toISOString().split("T")[0];
     const { data: meetings } = await supabase
       .from("meetings")
@@ -41,7 +40,14 @@ export default function Home() {
       .limit(1);
     if (meetings && meetings.length > 0) setNextMeeting(meetings[0]);
 
-    // Fetch stats
+    const { data: completedBooks } = await supabase
+      .from("books")
+      .select("*")
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (completedBooks) setPastBooks(completedBooks);
+
     const { count: bookCount } = await supabase
       .from("books")
       .select("*", { count: "exact", head: true })
@@ -51,7 +57,6 @@ export default function Home() {
       .from("members")
       .select("*", { count: "exact", head: true });
 
-    // Total pages across all books (completed + reading)
     const { data: allBooks } = await supabase
       .from("books")
       .select("page_count")
@@ -61,7 +66,6 @@ export default function Home() {
       ? allBooks.reduce((sum, b) => sum + (b.page_count || 0), 0)
       : 0;
 
-    // Avg rating across ALL visible ratings
     const { data: allRatings } = await supabase
       .from("ratings")
       .select("pre_rating, post_rating")
@@ -87,19 +91,16 @@ export default function Home() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Hero */}
-      <div className="text-center py-16">
-        <h1 className="font-serif text-6xl md:text-7xl text-mahogany tracking-wide mb-4">
+      <div className="text-center pt-4 pb-8">
+        <h1 className="font-script text-[16px] text-mahogany tracking-wide mb-2">
           The Clerb
         </h1>
-        <p className="font-sans text-lg text-warm-brown/70 max-w-md mx-auto">
+        <p className="font-script text-[16px] text-warm-brown/70 max-w-md mx-auto">
           A gathering of readers. One book at a time.
         </p>
       </div>
 
-      {/* Currently Reading + Next Club — side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {/* Currently Reading */}
         {currentBook ? (
           <Link href={`/book/${currentBook.id}`} className="block h-full">
             <div className="bg-white/50 rounded-xl border border-cream-dark p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
@@ -124,7 +125,7 @@ export default function Home() {
                       {currentBook.author}
                     </p>
                   )}
-                  {currentBook.page_count && (
+                  {currentBook.page_count !== null && (
                     <p className="font-sans text-xs text-warm-brown/50 mt-1">
                       {currentBook.page_count} pages
                     </p>
@@ -147,7 +148,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Next Club Meeting */}
         {nextMeeting ? (
           <Link href="/calendar" className="block h-full">
             <div className="bg-white/50 rounded-xl border border-gold/30 p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
@@ -196,7 +196,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">
@@ -211,7 +210,7 @@ export default function Home() {
             {stats.totalPages.toLocaleString()}
           </p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Pages Read
+            Total Pages Read
           </p>
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
@@ -222,25 +221,49 @@ export default function Home() {
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-gold font-bold">
-            {stats.avgRating !== null
-              ? stats.avgRating.toFixed(1)
-              : "\u2014"}
+            {stats.avgRating !== null ? stats.avgRating.toFixed(1) : "—"}
           </p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">
             Avg Rating
           </p>
         </div>
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">
-            {stats.totalPages > 0 ? stats.totalPages.toLocaleString() : "\u2014"}
-          </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Total Pages
-          </p>
-        </div>
       </div>
 
-      {/* Quick Links */}
+      <div className="bg-white/50 rounded-xl border border-cream-dark p-6 mb-8">
+        <h2 className="font-serif text-xl text-charcoal mb-4">Past Books</h2>
+        {pastBooks.length === 0 ? (
+          <p className="font-sans text-sm text-warm-brown/60 italic">
+            No completed books yet.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {pastBooks.map((book) => (
+              <Link
+                key={book.id}
+                href={`/book/${book.id}`}
+                className="flex items-center gap-3 p-3 rounded-lg hover:bg-cream-dark/40 transition-colors"
+              >
+                {(book.thumbnail_url || book.cover_url) && (
+                  <img
+                    src={book.thumbnail_url || book.cover_url || ""}
+                    alt={book.title}
+                    className="w-10 h-14 object-cover rounded"
+                    referrerPolicy="no-referrer"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-serif text-base text-charcoal truncate">{book.title}</p>
+                  <p className="font-sans text-xs text-warm-brown/70 truncate">{book.author || "Unknown author"}</p>
+                </div>
+                <p className="font-sans text-xs text-warm-brown/80">
+                  {book.page_count !== null ? `${book.page_count} pages read` : "Pages unknown"}
+                </p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Link
           href="/shelf"
@@ -261,7 +284,7 @@ export default function Home() {
             Calendar
           </h3>
           <p className="font-sans text-sm text-warm-brown/60">
-            Upcoming meetings
+            Upcoming gatherings
           </p>
         </Link>
         <Link
@@ -272,7 +295,7 @@ export default function Home() {
             Members
           </h3>
           <p className="font-sans text-sm text-warm-brown/60">
-            The readers
+            Meet the readers
           </p>
         </Link>
       </div>
