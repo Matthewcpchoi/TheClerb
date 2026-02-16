@@ -121,13 +121,13 @@ export default function BookShelf({
   );
 
   return (
-    <div className="w-full max-w-5xl mx-auto">
+    <div className="w-full mx-auto">
       <div className="bookcase-frame rounded-xl overflow-hidden shadow-2xl">
         <div className="bookcase-top rounded-t-xl" />
         <div className="flex">
           <div className="bookcase-side rounded-sm hidden sm:block" />
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <section className="shelf-back relative px-3 sm:px-5 py-4 sm:py-5 min-h-[260px] sm:min-h-[300px]">
               <p className="absolute top-3 left-3 sm:top-4 sm:left-5 font-serif text-lg sm:text-xl tracking-wide text-cream/95 z-10">
                 CURRENTLY READING
