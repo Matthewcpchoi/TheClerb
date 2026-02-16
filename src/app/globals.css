@@ -274,3 +274,23 @@ input[type="range"].rating-slider::-moz-range-thumb {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 430px) {
+  .bookcase-side {
+    width: 10px;
+  }
+
+  .wood-shelf {
+    height: 18px;
+  }
+}

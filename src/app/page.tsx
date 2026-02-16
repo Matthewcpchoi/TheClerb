@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Book, Meeting } from "@/types";
-import { formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatTime, getExactPageCount } from "@/lib/utils";
 import Link from "next/link";
 
 export default function Home() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
-  const [pastBooks, setPastBooks] = useState<Book[]>([]);
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalMembers: 0,
@@ -42,11 +41,11 @@ export default function Home() {
 
     const { data: completedBooks } = await supabase
       .from("books")
-      .select("page_count")
+      .select("page_count,total_pages")
       .eq("status", "completed");
 
     const totalPages = completedBooks
-      ? completedBooks.reduce((sum, b) => sum + (b.page_count || 0), 0)
+      ? completedBooks.reduce((sum, b) => sum + getExactPageCount(b), 0)
       : 0;
 
     const { count: bookCount } = await supabase
