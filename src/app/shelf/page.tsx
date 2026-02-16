@@ -182,16 +182,6 @@ export default function ShelfPage() {
         </div>
       )}
 
-      {currentBook && currentMember && (
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => handleStatusChange(currentBook.id, "completed")}
-            className="px-5 py-2 rounded-lg border border-sage text-sage font-sans text-sm hover:bg-sage hover:text-cream transition-colors"
-          >
-            Mark &ldquo;{currentBook.title}&rdquo; as Completed
-          </button>
-        </div>
-      )}
 
       {showSearch && currentMember && (
         <BookSearch

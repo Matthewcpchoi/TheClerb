@@ -42,11 +42,12 @@ export default function Home() {
 
     const { data: completedBooks } = await supabase
       .from("books")
-      .select("*")
-      .eq("status", "completed")
-      .order("completed_at", { ascending: false })
-      .order("created_at", { ascending: false });
-    if (completedBooks) setPastBooks(completedBooks);
+      .select("page_count")
+      .eq("status", "completed");
+
+    const totalPages = completedBooks
+      ? completedBooks.reduce((sum, b) => sum + (b.page_count || 0), 0)
+      : 0;
 
     const { count: bookCount } = await supabase
       .from("books")
@@ -56,15 +57,6 @@ export default function Home() {
     const { count: memberCount } = await supabase
       .from("members")
       .select("*", { count: "exact", head: true });
-
-    const { data: allBooks } = await supabase
-      .from("books")
-      .select("page_count")
-      .in("status", ["completed", "reading"]);
-
-    const totalPages = allBooks
-      ? allBooks.reduce((sum, b) => sum + (b.page_count || 0), 0)
-      : 0;
 
     const { data: allRatings } = await supabase
       .from("ratings")
@@ -91,13 +83,10 @@ export default function Home() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="text-center pt-4 pb-8">
-        <h1 className="font-script text-[16px] text-mahogany tracking-wide mb-2">
+      <div className="text-center pt-4 pb-6">
+        <h1 className="font-script text-[28px] text-mahogany tracking-wide">
           The Clerb
         </h1>
-        <p className="font-script text-[16px] text-warm-brown/70 max-w-md mx-auto">
-          A gathering of readers. One book at a time.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
@@ -198,70 +187,23 @@ export default function Home() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">
-            {stats.totalBooks}
-          </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Books Read
-          </p>
+          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalBooks}</p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">Books Read</p>
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">
-            {stats.totalPages.toLocaleString()}
-          </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Total Pages Read
-          </p>
+          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalPages.toLocaleString()}</p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">
-            {stats.totalMembers}
-          </p>
+          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalMembers}</p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Members</p>
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-gold font-bold">
             {stats.avgRating !== null ? stats.avgRating.toFixed(1) : "—"}
           </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Avg Rating
-          </p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">Avg Rating</p>
         </div>
-      </div>
-
-      <div className="bg-white/50 rounded-xl border border-cream-dark p-6 mb-8">
-        <h2 className="font-serif text-xl text-charcoal mb-4">Past Books</h2>
-        {pastBooks.length === 0 ? (
-          <p className="font-sans text-sm text-warm-brown/60 italic">
-            No completed books yet.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {pastBooks.map((book) => (
-              <Link
-                key={book.id}
-                href={`/book/${book.id}`}
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-cream-dark/40 transition-colors"
-              >
-                {(book.thumbnail_url || book.cover_url) && (
-                  <img
-                    src={book.thumbnail_url || book.cover_url || ""}
-                    alt={book.title}
-                    className="w-10 h-14 object-cover rounded"
-                    referrerPolicy="no-referrer"
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-serif text-base text-charcoal truncate">{book.title}</p>
-                  <p className="font-sans text-xs text-warm-brown/70 truncate">{book.author || "Unknown author"}</p>
-                </div>
-                <p className="font-sans text-xs text-warm-brown/80">
-                  {book.page_count !== null ? `${book.page_count} pages read` : "Pages unknown"}
-                </p>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -272,9 +214,7 @@ export default function Home() {
           <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
             The Shelf
           </h3>
-          <p className="font-sans text-sm text-warm-brown/60">
-            Browse the collection
-          </p>
+          <p className="font-sans text-sm text-warm-brown/60">Browse the collection</p>
         </Link>
         <Link
           href="/calendar"
@@ -283,9 +223,7 @@ export default function Home() {
           <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
             Calendar
           </h3>
-          <p className="font-sans text-sm text-warm-brown/60">
-            Upcoming gatherings
-          </p>
+          <p className="font-sans text-sm text-warm-brown/60">Upcoming gatherings</p>
         </Link>
         <Link
           href="/members"
@@ -294,9 +232,7 @@ export default function Home() {
           <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
             Members
           </h3>
-          <p className="font-sans text-sm text-warm-brown/60">
-            Meet the readers
-          </p>
+          <p className="font-sans text-sm text-warm-brown/60">Meet the readers</p>
         </Link>
       </div>
     </div>
