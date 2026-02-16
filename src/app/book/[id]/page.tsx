@@ -10,6 +10,7 @@ import RatingReveal from "@/components/RatingReveal";
 import DiscussionTopics from "@/components/DiscussionTopics";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { fetchVolumeById } from "@/lib/google-books";
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -40,10 +41,8 @@ export default function BookDetailPage() {
       if (data.page_count) setPageCount(data.page_count);
       if (data.google_books_id) {
         try {
-          const res = await fetch(
-            `https://www.googleapis.com/books/v1/volumes/${data.google_books_id}`
-          );
-          const json = await res.json();
+          const json = await fetchVolumeById(data.google_books_id);
+          if (!json) return;
           if (json.volumeInfo?.description) {
             setDescription(json.volumeInfo.description);
           }
