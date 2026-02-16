@@ -25,6 +25,7 @@ export default function BookDetailPage() {
   const [postReason, setPostReason] = useState("");
   const [pendingPostValue, setPendingPostValue] = useState<number | null>(null);
   const [description, setDescription] = useState("");
+  const [pageCount, setPageCount] = useState<number | null>(null);
 
   const fetchBook = useCallback(async () => {
     const { data } = await supabase
@@ -34,6 +35,7 @@ export default function BookDetailPage() {
       .single();
     if (data) {
       setBook(data);
+      if (data.page_count) setPageCount(data.page_count);
       if (data.google_books_id) {
         try {
           const res = await fetch(
@@ -42,6 +44,17 @@ export default function BookDetailPage() {
           const json = await res.json();
           if (json.volumeInfo?.description) {
             setDescription(json.volumeInfo.description);
+          }
+          if (json.volumeInfo?.pageCount) {
+            setPageCount(json.volumeInfo.pageCount);
+            // Backfill page_count in DB if missing
+            if (!data.page_count) {
+              supabase
+                .from("books")
+                .update({ page_count: json.volumeInfo.pageCount })
+                .eq("id", bookId)
+                .then();
+            }
           }
         } catch {
           // Ignore
@@ -279,8 +292,8 @@ export default function BookDetailPage() {
             </p>
           )}
           <div className="flex items-center gap-4 text-sm font-sans text-warm-brown/60 mb-4">
-            {book.page_count && (
-              <span>{book.page_count} pages</span>
+            {pageCount && (
+              <span>{pageCount} pages</span>
             )}
             {book.completed_at && (
               <span>Read {new Date(book.completed_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</span>
