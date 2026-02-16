@@ -95,7 +95,7 @@ export default function Home() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="text-center pt-4 pb-6">
-        <h1 className="font-script text-[36px] text-mahogany tracking-wide">
+        <h1 className="font-script text-[38px] text-mahogany tracking-wide">
           The Clerb
         </h1>
       </div>

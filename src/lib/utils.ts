@@ -76,5 +76,5 @@ export function getBookCoverCandidates(book: {
 }): string[] {
   const thumbnail = normalizeCoverUrl(book.thumbnail_url);
   const cover = normalizeCoverUrl(book.cover_url);
-  return [thumbnail, cover].filter((url, index, arr): url is string => !!url && arr.indexOf(url) === index);
+  return [cover, thumbnail].filter((url, index, arr): url is string => !!url && arr.indexOf(url) === index);
 }

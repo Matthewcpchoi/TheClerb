@@ -45,7 +45,7 @@ export function getBookCoverUrl(result: GoogleBooksResult): string | null {
   if (!links) return null;
   const url = links.thumbnail || links.smallThumbnail || null;
   if (url) {
-    return url.replace("http://", "https://").replace("zoom=1", "zoom=2");
+    return url.replace("http://", "https://").replace("zoom=1", "zoom=3");
   }
   return null;
 }
