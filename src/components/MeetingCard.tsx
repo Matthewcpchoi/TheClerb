@@ -30,19 +30,19 @@ export default function MeetingCard({
   return (
     <div
       className={`rounded-xl border overflow-hidden transition-all ${
-        isPast
-          ? "border-cream-dark/50 bg-cream-dark/20"
-          : "border-gold/30 bg-white/50 shadow-sm"
+        isPast ? "border-cream-dark/50 bg-cream-dark/20" : "border-gold/30 bg-white/50 shadow-sm"
       }`}
     >
       <div className="flex">
-        {/* Book cover as card art */}
         {hasBookCover && (
-          <Link href={`/book/${meeting.book!.id}`} className="flex-shrink-0">
+          <Link
+            href={`/book/${meeting.book!.id}`}
+            className="w-24 min-h-[170px] flex-shrink-0 bg-cream-dark/30 flex items-center justify-center p-2"
+          >
             <img
               src={meeting.book!.cover_url || meeting.book!.thumbnail_url || ""}
               alt={meeting.book!.title}
-              className="w-24 h-full object-cover min-h-[140px]"
+              className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
             />
           </Link>
@@ -58,9 +58,7 @@ export default function MeetingCard({
             </div>
             <div className="flex items-center gap-1">
               {isPast && (
-                <span className="px-2 py-1 bg-cream-dark rounded text-xs font-sans text-warm-brown/60">
-                  Past
-                </span>
+                <span className="px-2 py-1 bg-cream-dark rounded text-xs font-sans text-warm-brown/60">Past</span>
               )}
               {currentMemberId && (
                 <>
@@ -87,29 +85,18 @@ export default function MeetingCard({
             </div>
           </div>
 
-          {/* Book label (when no cover or as text fallback) */}
           {meeting.book && !hasBookCover && (
             <Link
               href={`/book/${meeting.book.id}`}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-mahogany/5 hover:bg-mahogany/10 transition-colors mb-3"
             >
-              <span className="font-sans text-xs text-mahogany">
-                {meeting.book.title}
-              </span>
+              <span className="font-sans text-xs text-mahogany">{meeting.book.title}</span>
             </Link>
           )}
 
-          {meeting.location && (
-            <p className="font-sans text-sm text-warm-brown/70 mb-2">
-              Location: {meeting.location}
-            </p>
-          )}
+          {meeting.location && <p className="font-sans text-sm text-warm-brown/70 mb-2">Location: {meeting.location}</p>}
 
-          {meeting.notes && (
-            <p className="font-sans text-sm text-charcoal/70 mb-4 italic">
-              {meeting.notes}
-            </p>
-          )}
+          {meeting.notes && <p className="font-sans text-sm text-charcoal/70 mb-4 italic">{meeting.notes}</p>}
 
           <AttendanceTracker
             attendance={attendance}
@@ -117,7 +104,6 @@ export default function MeetingCard({
             onRsvp={(status) => onRsvp(meeting.id, status)}
           />
 
-          {/* Delete confirmation */}
           {showDeleteConfirm && (
             <div className="mt-3 flex items-center gap-2 p-3 bg-red-50 rounded-lg border border-red-200">
               <p className="font-sans text-xs text-red-700 flex-1">Delete this meeting?</p>

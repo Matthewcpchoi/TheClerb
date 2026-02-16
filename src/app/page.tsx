@@ -21,7 +21,6 @@ export default function Home() {
   }, []);
 
   async function fetchData() {
-    // Fetch current book
     const { data: reading } = await supabase
       .from("books")
       .select("*")
@@ -30,7 +29,6 @@ export default function Home() {
       .single();
     if (reading) setCurrentBook(reading);
 
-    // Fetch next upcoming meeting
     const now = new Date().toISOString().split("T")[0];
     const { data: meetings } = await supabase
       .from("meetings")
@@ -41,7 +39,15 @@ export default function Home() {
       .limit(1);
     if (meetings && meetings.length > 0) setNextMeeting(meetings[0]);
 
-    // Fetch stats
+    const { data: completedBooks } = await supabase
+      .from("books")
+      .select("page_count")
+      .eq("status", "completed");
+
+    const totalPages = completedBooks
+      ? completedBooks.reduce((sum, b) => sum + (b.page_count || 0), 0)
+      : 0;
+
     const { count: bookCount } = await supabase
       .from("books")
       .select("*", { count: "exact", head: true })
@@ -51,17 +57,6 @@ export default function Home() {
       .from("members")
       .select("*", { count: "exact", head: true });
 
-    // Total pages across all books (completed + reading)
-    const { data: allBooks } = await supabase
-      .from("books")
-      .select("page_count")
-      .in("status", ["completed", "reading"]);
-
-    const totalPages = allBooks
-      ? allBooks.reduce((sum, b) => sum + (b.page_count || 0), 0)
-      : 0;
-
-    // Avg rating across ALL visible ratings
     const { data: allRatings } = await supabase
       .from("ratings")
       .select("pre_rating, post_rating")
@@ -87,19 +82,13 @@ export default function Home() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Hero */}
-      <div className="text-center py-16">
-        <h1 className="font-serif text-6xl md:text-7xl text-mahogany tracking-wide mb-4">
+      <div className="text-center pt-4 pb-6">
+        <h1 className="font-script text-[28px] text-mahogany tracking-wide">
           The Clerb
         </h1>
-        <p className="font-sans text-lg text-warm-brown/70 max-w-md mx-auto">
-          A gathering of readers. One book at a time.
-        </p>
       </div>
 
-      {/* Currently Reading + Next Club — side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {/* Currently Reading */}
         {currentBook ? (
           <Link href={`/book/${currentBook.id}`} className="block h-full">
             <div className="bg-white/50 rounded-xl border border-cream-dark p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
@@ -124,7 +113,7 @@ export default function Home() {
                       {currentBook.author}
                     </p>
                   )}
-                  {currentBook.page_count && (
+                  {currentBook.page_count !== null && (
                     <p className="font-sans text-xs text-warm-brown/50 mt-1">
                       {currentBook.page_count} pages
                     </p>
@@ -147,7 +136,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Next Club Meeting */}
         {nextMeeting ? (
           <Link href="/calendar" className="block h-full">
             <div className="bg-white/50 rounded-xl border border-gold/30 p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
@@ -196,51 +184,27 @@ export default function Home() {
         )}
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">
-            {stats.totalBooks}
-          </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Books Read
-          </p>
+          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalBooks}</p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">Books Read</p>
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">
-            {stats.totalPages.toLocaleString()}
-          </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Pages Read
-          </p>
+          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalPages.toLocaleString()}</p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">
-            {stats.totalMembers}
-          </p>
+          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalMembers}</p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Members</p>
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-gold font-bold">
-            {stats.avgRating !== null
-              ? stats.avgRating.toFixed(1)
-              : "\u2014"}
+            {stats.avgRating !== null ? stats.avgRating.toFixed(1) : "—"}
           </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Avg Rating
-          </p>
-        </div>
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">
-            {stats.totalPages > 0 ? stats.totalPages.toLocaleString() : "\u2014"}
-          </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">
-            Total Pages
-          </p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">Avg Rating</p>
         </div>
       </div>
 
-      {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Link
           href="/shelf"
@@ -249,9 +213,7 @@ export default function Home() {
           <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
             The Shelf
           </h3>
-          <p className="font-sans text-sm text-warm-brown/60">
-            Browse the collection
-          </p>
+          <p className="font-sans text-sm text-warm-brown/60">Browse the collection</p>
         </Link>
         <Link
           href="/calendar"
@@ -260,9 +222,7 @@ export default function Home() {
           <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
             Calendar
           </h3>
-          <p className="font-sans text-sm text-warm-brown/60">
-            Upcoming meetings
-          </p>
+          <p className="font-sans text-sm text-warm-brown/60">Upcoming gatherings</p>
         </Link>
         <Link
           href="/members"
@@ -271,9 +231,7 @@ export default function Home() {
           <h3 className="font-serif text-lg text-charcoal mb-1 group-hover:text-mahogany transition-colors">
             Members
           </h3>
-          <p className="font-sans text-sm text-warm-brown/60">
-            The readers
-          </p>
+          <p className="font-sans text-sm text-warm-brown/60">Meet the readers</p>
         </Link>
       </div>
     </div>
