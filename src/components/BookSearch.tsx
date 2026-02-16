@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { searchBooks, getBookCoverUrl, getThumbnailUrl } from "@/lib/google-books";
+import {
+  searchBooks,
+  fetchVolumeById,
+  getBookCoverUrl,
+  getThumbnailUrl,
+  getISBN,
+} from "@/lib/google-books";
+import {
+  fetchOpenLibraryByISBN,
+  getOpenLibraryCoverByISBN,
+} from "@/lib/open-library";
 import { extractDominantColor } from "@/lib/color-extract";
 import { supabase } from "@/lib/supabase";
 import { GoogleBooksResult, Book } from "@/types";
@@ -55,8 +65,40 @@ export default function BookSearch({
 
   async function handleSelectBook(result: GoogleBooksResult) {
     setIsAdding(result.id);
-    const coverUrl = getBookCoverUrl(result);
-    const thumbnailUrl = getThumbnailUrl(result);
+
+    // Fetch full volume details — the search endpoint uses a "lite" projection
+    // that often omits pageCount, industryIdentifiers, and high-res imageLinks.
+    const fullVolume = await fetchVolumeById(result.id);
+    const vol = fullVolume || result;
+
+    let coverUrl = getBookCoverUrl(vol);
+    let thumbnailUrl = getThumbnailUrl(vol);
+    let pageCount = vol.volumeInfo.pageCount ?? null;
+
+    // Try Open Library fallback for missing cover or page count
+    const isbn = getISBN(vol);
+    if (isbn) {
+      if (!coverUrl) {
+        coverUrl = getOpenLibraryCoverByISBN(isbn, "L");
+        if (!thumbnailUrl) {
+          thumbnailUrl = getOpenLibraryCoverByISBN(isbn, "M");
+        }
+      }
+
+      if (!pageCount) {
+        try {
+          const olData = await fetchOpenLibraryByISBN(isbn);
+          if (olData?.number_of_pages && olData.number_of_pages > 0) {
+            pageCount = olData.number_of_pages;
+            console.log(
+              `[Open Library] Backfilled page count for "${vol.volumeInfo.title}": ${pageCount}`
+            );
+          }
+        } catch {
+          /* skip */
+        }
+      }
+    }
 
     let spineColor = "#3C1518";
     if (thumbnailUrl) {
@@ -68,8 +110,8 @@ export default function BookSearch({
     }
 
     const bookData: Record<string, unknown> = {
-      title: result.volumeInfo.title,
-      author: result.volumeInfo.authors?.join(", ") || null,
+      title: vol.volumeInfo.title,
+      author: vol.volumeInfo.authors?.join(", ") || null,
       cover_url: coverUrl,
       thumbnail_url: thumbnailUrl,
       spine_color: spineColor,
@@ -77,8 +119,8 @@ export default function BookSearch({
       status: "upcoming",
       added_by: memberId,
     };
-    if (result.volumeInfo.pageCount) {
-      bookData.page_count = result.volumeInfo.pageCount;
+    if (pageCount) {
+      bookData.page_count = pageCount;
     }
 
     let { data, error } = await supabase

@@ -70,11 +70,39 @@ function normalizeCoverUrl(url: string | null | undefined): string | null {
   return trimmed;
 }
 
+/**
+ * Returns an ordered list of cover URLs to try, from best to worst quality.
+ * Components should render the first URL and cascade via onError.
+ *
+ * For Google Books URLs the function generates additional zoom variants so
+ * the browser can fall back if one resolution 404s.
+ */
 export function getBookCoverCandidates(book: {
   thumbnail_url?: string | null;
   cover_url?: string | null;
 }): string[] {
-  const thumbnail = normalizeCoverUrl(book.thumbnail_url);
   const cover = normalizeCoverUrl(book.cover_url);
-  return [cover, thumbnail].filter((url, index, arr): url is string => !!url && arr.indexOf(url) === index);
+  const thumbnail = normalizeCoverUrl(book.thumbnail_url);
+
+  const candidates: (string | null)[] = [cover];
+
+  // If cover is a Google Books URL, also add zoom variants as fallbacks
+  if (cover && cover.includes("books.google")) {
+    const zoom1 = cover.replace(/zoom=\d/, "zoom=1");
+    if (zoom1 !== cover) candidates.push(zoom1);
+  }
+
+  candidates.push(thumbnail);
+
+  // If thumbnail is a Google Books URL, add a zoom=3 variant
+  if (thumbnail && thumbnail.includes("books.google")) {
+    const zoom3 = thumbnail.replace(/zoom=\d/, "zoom=3");
+    if (zoom3 !== thumbnail && !candidates.includes(zoom3)) {
+      candidates.push(zoom3);
+    }
+  }
+
+  return candidates.filter(
+    (url, index, arr): url is string => !!url && arr.indexOf(url) === index
+  );
 }

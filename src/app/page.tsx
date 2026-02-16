@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Book, Meeting } from "@/types";
 import { formatDate, formatTime, getBookCoverCandidates, getExactPageCount } from "@/lib/utils";
-import { fetchVolumeById } from "@/lib/google-books";
+import { fetchVolumeById, getISBN } from "@/lib/google-books";
+import { fetchOpenLibraryByISBN } from "@/lib/open-library";
 import Link from "next/link";
 
 export default function Home() {
@@ -51,7 +52,7 @@ export default function Home() {
       .select("id,page_count,total_pages,google_books_id")
       .eq("status", "completed");
 
-    // Backfill page counts from Google Books for books missing them
+    // Backfill page counts from Google Books + Open Library for books missing them
     const booksToBackfill = (completedBooks || []).filter(
       (b) => getExactPageCount(b) === null && b.google_books_id
     );
@@ -59,7 +60,20 @@ export default function Home() {
       booksToBackfill.map(async (b) => {
         try {
           const vol = await fetchVolumeById(b.google_books_id!);
-          const pc = vol?.volumeInfo?.pageCount;
+          let pc = vol?.volumeInfo?.pageCount;
+
+          // If Google Books doesn't have it, try Open Library via ISBN
+          if ((!pc || pc <= 0) && vol) {
+            const isbn = getISBN(vol);
+            if (isbn) {
+              const olData = await fetchOpenLibraryByISBN(isbn);
+              if (olData?.number_of_pages && olData.number_of_pages > 0) {
+                pc = olData.number_of_pages;
+                console.log(`[Open Library] Backfilled page count for "${vol.volumeInfo.title}": ${pc}`);
+              }
+            }
+          }
+
           if (typeof pc === "number" && pc > 0) {
             b.page_count = pc;
             await supabase.from("books").update({ page_count: pc }).eq("id", b.id);
@@ -68,7 +82,17 @@ export default function Home() {
       })
     );
 
-    const pageValues = (completedBooks || [])
+    // Log books still missing page counts
+    const allCompleted = completedBooks || [];
+    const missingPages = allCompleted.filter((b) => getExactPageCount(b) === null);
+    if (missingPages.length > 0) {
+      console.log(
+        `[Pages] ${missingPages.length} book(s) missing page count:`,
+        missingPages.map((b) => b.id)
+      );
+    }
+
+    const pageValues = allCompleted
       .map((b) => getExactPageCount(b))
       .filter((v): v is number => typeof v === "number");
 
