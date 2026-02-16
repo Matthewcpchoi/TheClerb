@@ -208,6 +208,14 @@ export default function Home() {
         </div>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">
+            {stats.totalPages.toLocaleString()}
+          </p>
+          <p className="font-sans text-xs text-warm-brown/60 mt-1">
+            Pages Read
+          </p>
+        </div>
+        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
+          <p className="font-serif text-3xl text-mahogany font-bold">
             {stats.totalMembers}
           </p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Members</p>

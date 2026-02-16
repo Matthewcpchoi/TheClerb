@@ -187,6 +187,11 @@ export default function BookSearch({
                         {result.volumeInfo.authors.join(", ")}
                       </p>
                     )}
+                    {result.volumeInfo.pageCount && (
+                      <p className="font-sans text-xs text-warm-brown/50 mt-0.5">
+                        {result.volumeInfo.pageCount} pages
+                      </p>
+                    )}
                   </div>
                   {isAdding === result.id && (
                     <span className="font-sans text-xs text-gold flex-shrink-0">
