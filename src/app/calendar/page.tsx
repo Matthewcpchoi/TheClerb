@@ -165,10 +165,7 @@ export default function CalendarPage() {
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="font-serif text-3xl text-charcoal">Calendar</h1>
-          <p className="font-sans text-sm text-warm-brown/60 mt-1">
-            Gatherings and discussions
-          </p>
+          <h1 className="font-script text-[46px] text-mahogany tracking-wide">Calendar</h1>
         </div>
         {currentMember && (
           <button

@@ -119,10 +119,7 @@ export default function ShelfPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="font-serif text-3xl text-charcoal">The Shelf</h1>
-          <p className="font-sans text-sm text-warm-brown/60 mt-1">
-            Our collection, one spine at a time
-          </p>
+          <h1 className="font-script text-[46px] text-mahogany tracking-wide">The Shelf</h1>
         </div>
         {currentMember && (
           <button

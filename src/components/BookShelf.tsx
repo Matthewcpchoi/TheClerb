@@ -136,11 +136,10 @@ export default function BookShelf({
           <div className="bookcase-side rounded-sm hidden sm:block" />
 
           <div className="flex-1 min-w-0">
-            <section className="shelf-back relative px-3 sm:px-5 py-3 sm:py-4 min-h-[220px] sm:min-h-[250px]">
+            <section className="shelf-back relative px-3 sm:px-5 py-3 sm:py-4 min-h-[200px] sm:min-h-[220px]">
               <p className="absolute top-3 left-3 sm:top-4 sm:left-5 font-serif text-sm sm:text-base tracking-wide text-cream/95 z-10">
                 CURRENTLY READING
               </p>
-              <div className="shelf-spotlight" />
               <div className="relative z-10 h-full flex items-end justify-center pt-10">
                 <div className="flex items-end justify-center pb-2">
                   {currentBook ? <BookTile book={currentBook} score={bookRatings[currentBook.id]} /> : emptyCurrentReadTile}
@@ -149,7 +148,7 @@ export default function BookShelf({
             </section>
             <div className="wood-shelf rounded-sm" />
 
-            <section className="shelf-back px-3 sm:px-5 py-3 sm:py-4 min-h-[220px] sm:min-h-[250px]">
+            <section className="shelf-back px-3 sm:px-5 py-3 sm:py-4 min-h-[200px] sm:min-h-[220px]">
               <p className="font-serif text-sm sm:text-base tracking-wide text-cream/90 mb-3">PAST READS</p>
               <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ WebkitOverflowScrolling: "touch" }}>
                 {completedBooks.map((book) => (

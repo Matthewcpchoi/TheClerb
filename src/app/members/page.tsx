@@ -209,8 +209,7 @@ export default function MembersPage() {
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="font-serif text-3xl text-charcoal">Members</h1>
-          <p className="font-sans text-sm text-warm-brown/60 mt-1">The readers of The Clerb</p>
+          <h1 className="font-script text-[46px] text-mahogany tracking-wide">Members</h1>
         </div>
       </div>
 

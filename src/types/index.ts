@@ -71,9 +71,14 @@ export interface GoogleBooksResult {
     authors?: string[];
     description?: string;
     pageCount?: number;
+    industryIdentifiers?: { type: string; identifier: string }[];
     imageLinks?: {
-      thumbnail?: string;
       smallThumbnail?: string;
+      thumbnail?: string;
+      small?: string;
+      medium?: string;
+      large?: string;
+      extraLarge?: string;
     };
   };
 }
