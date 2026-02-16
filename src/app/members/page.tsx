@@ -50,7 +50,7 @@ async function fetchMemberStats(members: Member[], completedBooks: Book[]) {
     const ratedBookIds = new Set(scoreRows.map((r) => r.book_id));
     const pagesRead = completedBooks
       .filter((b) => ratedBookIds.has(b.id))
-      .reduce((sum, b) => sum + getExactPageCount(b), 0);
+      .reduce((sum, b) => sum + (getExactPageCount(b) ?? 0), 0);
 
     const { count: attended } = await supabase
       .from("attendance")

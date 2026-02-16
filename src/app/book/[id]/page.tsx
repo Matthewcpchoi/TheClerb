@@ -40,7 +40,7 @@ export default function BookDetailPage() {
     if (data) {
       setBook(data);
       if (typeof data.page_count === "number") setPageCount(data.page_count);
-      setCoverSrc(data.thumbnail_url || data.cover_url || "");
+      setCoverSrc(data.cover_url || data.thumbnail_url || "");
       if (data.google_books_id) {
         try {
           const json = await fetchVolumeById(data.google_books_id);
@@ -236,8 +236,8 @@ export default function BookDetailPage() {
               className="w-48 h-72 object-cover rounded-lg shadow-xl"
               referrerPolicy="no-referrer"
               onError={() => {
-                if (coverSrc !== (book.cover_url || "")) {
-                  setCoverSrc(book.cover_url || "");
+                if (coverSrc !== (book.thumbnail_url || "")) {
+                  setCoverSrc(book.thumbnail_url || "");
                 } else {
                   setCoverSrc("");
                 }

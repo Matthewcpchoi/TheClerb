@@ -49,8 +49,15 @@ export function cn(...classes: (string | boolean | undefined | null)[]): string 
   return classes.filter(Boolean).join(" ");
 }
 
-export function getExactPageCount(book: { page_count?: number | null; total_pages?: number | null }): number {
-  if (typeof book.page_count === "number") return book.page_count;
-  if (typeof book.total_pages === "number") return book.total_pages;
-  return 0;
+function parsePageValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return null;
+}
+
+export function getExactPageCount(book: { page_count?: number | string | null; total_pages?: number | string | null }): number | null {
+  return parsePageValue(book.page_count) ?? parsePageValue(book.total_pages);
 }

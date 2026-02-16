@@ -13,7 +13,7 @@ export default function Home() {
     totalBooks: 0,
     totalMembers: 0,
     avgRating: null as number | null,
-    totalPages: 0,
+    totalPages: null as number | null,
   });
 
   useEffect(() => {
@@ -44,9 +44,13 @@ export default function Home() {
       .select("page_count,total_pages")
       .eq("status", "completed");
 
-    const totalPages = completedBooks
-      ? completedBooks.reduce((sum, b) => sum + getExactPageCount(b), 0)
-      : 0;
+    const pageValues = (completedBooks || [])
+      .map((b) => getExactPageCount(b))
+      .filter((v): v is number => typeof v === "number");
+
+    const totalPages = pageValues.length > 0
+      ? pageValues.reduce((sum, pages) => sum + pages, 0)
+      : null;
 
     const { count: bookCount } = await supabase
       .from("books")
@@ -184,15 +188,17 @@ export default function Home() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className={`grid grid-cols-2 ${stats.totalPages !== null ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4 mb-8`}>
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalBooks}</p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Books Read</p>
         </div>
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalPages.toLocaleString()}</p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
-        </div>
+        {stats.totalPages !== null && (
+          <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
+            <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalPages.toLocaleString()}</p>
+            <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
+          </div>
+        )}
         <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
           <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalMembers}</p>
           <p className="font-sans text-xs text-warm-brown/60 mt-1">Members</p>
