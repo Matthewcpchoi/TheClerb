@@ -41,7 +41,7 @@ export default function RatingReveal({
                 Avg Pre-Rating
               </p>
               <p className="font-serif text-2xl text-mahogany font-bold">
-                {avgPre.toFixed(2)}
+                {avgPre.toFixed(1)}
               </p>
             </div>
           )}
@@ -51,7 +51,7 @@ export default function RatingReveal({
                 Avg Post-Rating
               </p>
               <p className="font-serif text-2xl text-gold font-bold">
-                {avgPost.toFixed(2)}
+                {avgPost.toFixed(1)}
               </p>
             </div>
           )}
@@ -140,7 +140,7 @@ export default function RatingReveal({
                         Pre
                       </p>
                       <p className="font-serif text-sm text-mahogany font-bold">
-                        {rating.pre_rating.toFixed(2)}
+                        {rating.pre_rating.toFixed(1)}
                       </p>
                     </div>
                   )}
@@ -150,7 +150,7 @@ export default function RatingReveal({
                         Post
                       </p>
                       <p className="font-serif text-sm text-gold font-bold">
-                        {rating.post_rating.toFixed(2)}
+                        {rating.post_rating.toFixed(1)}
                       </p>
                     </div>
                   )}
@@ -165,7 +165,7 @@ export default function RatingReveal({
                           : "bg-gold/20 text-gold"
                       }`}
                     >
-                      {rating.is_visible ? "Visible" : "Hidden"}
+                      {rating.is_visible ? "Visible (click to hide)" : "Hidden (click to reveal)"}
                     </button>
                   )}
                 </div>
