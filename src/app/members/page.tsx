@@ -116,18 +116,27 @@ function MemberBookTile({
   book: Book;
   score: number | undefined;
 }) {
+  const [imageSrc, setImageSrc] = useState(book.thumbnail_url || book.cover_url || "");
+
   return (
     <div className="text-center w-24 flex-shrink-0">
       <div
         className="relative transition-transform duration-200 hover:-translate-y-1 mx-auto"
         style={{ transform: "perspective(400px) rotateY(-3deg)", transformOrigin: "left center" }}
       >
-        {book.cover_url || book.thumbnail_url ? (
+        {imageSrc ? (
           <img
-            src={book.thumbnail_url || book.cover_url || ""}
+            src={imageSrc}
             alt={book.title}
             className="w-24 h-36 object-cover rounded shadow-lg"
             referrerPolicy="no-referrer"
+            onError={() => {
+              if (imageSrc !== (book.cover_url || "")) {
+                setImageSrc(book.cover_url || "");
+              } else {
+                setImageSrc("");
+              }
+            }}
           />
         ) : (
           <div
