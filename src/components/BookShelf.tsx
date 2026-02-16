@@ -3,7 +3,7 @@
 import { Book } from "@/types";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { getExactPageCount } from "@/lib/utils";
+import { getBookCoverCandidates, getExactPageCount } from "@/lib/utils";
 
 interface BookShelfProps {
   currentBook: Book | null;
@@ -14,7 +14,9 @@ interface BookShelfProps {
 }
 
 function BookTile({ book, score }: { book: Book; score?: number }) {
-  const [imageSrc, setImageSrc] = useState(book.cover_url || book.thumbnail_url || "");
+  const imageSources = useMemo(() => getBookCoverCandidates(book), [book]);
+  const [imageIndex, setImageIndex] = useState(0);
+  const imageSrc = imageSources[imageIndex] || "";
   const pageCount = getExactPageCount(book);
 
   return (
@@ -27,13 +29,7 @@ function BookTile({ book, score }: { book: Book; score?: number }) {
               alt={book.title}
               className="w-24 h-36 sm:w-28 sm:h-40 object-cover rounded shadow-lg"
               referrerPolicy="no-referrer"
-              onError={() => {
-                if (imageSrc !== (book.thumbnail_url || "")) {
-                  setImageSrc(book.thumbnail_url || "");
-                } else {
-                  setImageSrc("");
-                }
-              }}
+              onError={() => setImageIndex((prev) => prev + 1)}
             />
           ) : (
             <div
@@ -69,7 +65,12 @@ function FeaturedBook({
   score?: number;
   dim?: boolean;
 }) {
-  const [imageSrc, setImageSrc] = useState(book?.cover_url || book?.thumbnail_url || "");
+  const imageSources = useMemo(
+    () => (book ? getBookCoverCandidates(book) : []),
+    [book]
+  );
+  const [imageIndex, setImageIndex] = useState(0);
+  const imageSrc = imageSources[imageIndex] || "";
 
   if (!book) {
     return <p className="text-xs text-cream/60 font-sans italic">No ratings yet</p>;
@@ -86,13 +87,7 @@ function FeaturedBook({
             className="w-20 h-28 sm:w-24 sm:h-36 object-cover rounded shadow-xl"
             style={dim ? { filter: "saturate(0.65) brightness(0.85)" } : undefined}
             referrerPolicy="no-referrer"
-            onError={() => {
-              if (imageSrc !== (book.thumbnail_url || "")) {
-                setImageSrc(book.thumbnail_url || "");
-              } else {
-                setImageSrc("");
-              }
-            }}
+            onError={() => setImageIndex((prev) => prev + 1)}
           />
         ) : (
           <div className="w-20 h-28 sm:w-24 sm:h-36 bg-mahogany rounded shadow-xl flex items-center justify-center p-2">
@@ -126,11 +121,11 @@ export default function BookShelf({
   );
 
   return (
-    <div className="w-screen max-w-none -mx-4 sm:mx-0 sm:w-full sm:max-w-4xl sm:mx-auto">
+    <div className="w-full max-w-5xl mx-auto">
       <div className="bookcase-frame rounded-xl overflow-hidden shadow-2xl">
         <div className="bookcase-top rounded-t-xl" />
         <div className="flex">
-          <div className="bookcase-side rounded-sm" />
+          <div className="bookcase-side rounded-sm hidden sm:block" />
 
           <div className="flex-1">
             <section className="shelf-back relative px-3 sm:px-5 py-4 sm:py-5 min-h-[260px] sm:min-h-[300px]">
@@ -148,7 +143,7 @@ export default function BookShelf({
 
             <section className="shelf-back px-3 sm:px-5 py-4 sm:py-5 min-h-[260px] sm:min-h-[300px]">
               <p className="font-serif text-xl sm:text-2xl tracking-wide text-cream/90 mb-3">PAST READS</p>
-              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ WebkitOverflowScrolling: "touch" }}>
                 {completedBooks.map((book) => (
                   <BookTile key={book.id} book={book} score={bookRatings[book.id]} />
                 ))}
@@ -183,7 +178,7 @@ export default function BookShelf({
             <div className="wood-shelf rounded-sm" />
           </div>
 
-          <div className="bookcase-side rounded-sm" />
+          <div className="bookcase-side rounded-sm hidden sm:block" />
         </div>
       </div>
     </div>

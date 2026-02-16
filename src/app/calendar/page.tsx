@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Meeting, Attendance, Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
 import MeetingCard from "@/components/MeetingCard";
+import { getBookCoverCandidates } from "@/lib/utils";
 
 export default function CalendarPage() {
   const { currentMember } = useMember();
@@ -59,6 +60,12 @@ export default function CalendarPage() {
     fetchAttendance();
     fetchBooks();
   }, [fetchMeetings, fetchAttendance, fetchBooks]);
+
+  const [selectedBookCoverIndex, setSelectedBookCoverIndex] = useState(0);
+
+  useEffect(() => {
+    setSelectedBookCoverIndex(0);
+  }, [form.book_id]);
 
   useEffect(() => {
     const channel = supabase
@@ -152,6 +159,7 @@ export default function CalendarPage() {
   );
 
   const selectedBook = form.book_id ? books.find((b) => b.id === form.book_id) : null;
+  const selectedBookCoverSources = selectedBook ? getBookCoverCandidates(selectedBook) : [];
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -221,12 +229,13 @@ export default function CalendarPage() {
                 Book for this meeting
               </label>
               <div className="flex items-start gap-4">
-                {selectedBook && (selectedBook.cover_url || selectedBook.thumbnail_url) ? (
+                {selectedBookCoverSources[selectedBookCoverIndex] ? (
                   <img
-                    src={selectedBook.cover_url || selectedBook.thumbnail_url || ""}
-                    alt={selectedBook.title}
+                    src={selectedBookCoverSources[selectedBookCoverIndex]}
+                    alt={selectedBook?.title || "Book cover"}
                     className="w-14 h-20 object-cover rounded shadow-md flex-shrink-0"
                     referrerPolicy="no-referrer"
+                    onError={() => setSelectedBookCoverIndex((prev) => prev + 1)}
                   />
                 ) : (
                   <div className="w-14 h-20 bg-cream-dark rounded flex items-center justify-center flex-shrink-0">

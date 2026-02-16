@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Meeting, Attendance } from "@/types";
-import { formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatTime, getBookCoverCandidates } from "@/lib/utils";
 import AttendanceTracker from "./AttendanceTracker";
 import Link from "next/link";
 
@@ -25,7 +25,14 @@ export default function MeetingCard({
 }: MeetingCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const isPast = new Date(meeting.date + "T" + meeting.time) < new Date();
-  const hasBookCover = meeting.book && (meeting.book.cover_url || meeting.book.thumbnail_url);
+  const bookCoverSources = useMemo(() => (meeting.book ? getBookCoverCandidates(meeting.book) : []), [meeting.book]);
+  const [coverIndex, setCoverIndex] = useState(0);
+
+  useEffect(() => {
+    setCoverIndex(0);
+  }, [meeting.book?.id]);
+
+  const hasBookCover = bookCoverSources[coverIndex];
 
   return (
     <div
@@ -40,10 +47,11 @@ export default function MeetingCard({
             className="w-24 min-h-[170px] flex-shrink-0 bg-cream-dark/30 flex items-center justify-center p-2"
           >
             <img
-              src={meeting.book!.thumbnail_url || meeting.book!.cover_url || ""}
+              src={bookCoverSources[coverIndex]}
               alt={meeting.book!.title}
               className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
+              onError={() => setCoverIndex((prev) => prev + 1)}
             />
           </Link>
         )}

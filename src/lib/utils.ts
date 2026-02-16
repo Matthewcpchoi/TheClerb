@@ -61,3 +61,20 @@ function parsePageValue(value: unknown): number | null {
 export function getExactPageCount(book: { page_count?: number | string | null; total_pages?: number | string | null }): number | null {
   return parsePageValue(book.page_count) ?? parsePageValue(book.total_pages);
 }
+
+function normalizeCoverUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("http://")) return `https://${trimmed.slice(7)}`;
+  return trimmed;
+}
+
+export function getBookCoverCandidates(book: {
+  thumbnail_url?: string | null;
+  cover_url?: string | null;
+}): string[] {
+  const thumbnail = normalizeCoverUrl(book.thumbnail_url);
+  const cover = normalizeCoverUrl(book.cover_url);
+  return [thumbnail, cover].filter((url, index, arr): url is string => !!url && arr.indexOf(url) === index);
+}
