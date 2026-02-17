@@ -91,6 +91,38 @@ function getGoogleCoverVariants(url: string): string[] {
   return Array.from(variants);
 }
 
+function getOpenLibraryCoverVariants(url: string): string[] {
+  if (!url.includes("covers.openlibrary.org")) return [url];
+
+  const variants = new Set<string>([url]);
+
+  if (url.includes("-L.jpg")) {
+    variants.add(url.replace("-L.jpg", "-M.jpg"));
+    variants.add(url.replace("-L.jpg", "-S.jpg"));
+  } else if (url.includes("-M.jpg")) {
+    variants.add(url.replace("-M.jpg", "-L.jpg"));
+    variants.add(url.replace("-M.jpg", "-S.jpg"));
+  } else if (url.includes("-S.jpg")) {
+    variants.add(url.replace("-S.jpg", "-M.jpg"));
+    variants.add(url.replace("-S.jpg", "-L.jpg"));
+  }
+
+  return Array.from(variants);
+}
+
+function getCoverVariants(url: string): string[] {
+  const googleVariants = getGoogleCoverVariants(url);
+  const variants = new Set<string>();
+
+  for (const googleVariant of googleVariants) {
+    for (const openLibraryVariant of getOpenLibraryCoverVariants(googleVariant)) {
+      variants.add(openLibraryVariant);
+    }
+  }
+
+  return Array.from(variants);
+}
+
 /**
  * Returns an ordered list of cover URLs to try, from best to worst quality.
  * Components should render the first URL and cascade via onError.
@@ -109,11 +141,10 @@ export function getBookCoverCandidates(book: {
 
   for (const url of [cover, thumbnail]) {
     if (!url) continue;
-    for (const variant of getGoogleCoverVariants(url)) {
+    for (const variant of getCoverVariants(url)) {
       candidates.add(variant);
     }
   }
 
   return Array.from(candidates);
 }
-
