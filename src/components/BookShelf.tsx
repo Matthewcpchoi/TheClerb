@@ -2,7 +2,7 @@
 
 import { Book } from "@/types";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getBookCoverCandidates, getExactPageCount } from "@/lib/utils";
 
 interface BookShelfProps {
@@ -16,9 +16,9 @@ interface BookShelfProps {
 function ScoreBadge({ score, className = "bg-gold" }: { score: number; className?: string }) {
   return (
     <div
-      className={`absolute -bottom-3 -right-3 text-cream rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center shadow-lg border-2 border-cream ${className}`}
+      className={`absolute -bottom-2 -right-2 text-cream rounded-full w-9 h-9 sm:w-10 sm:h-10 inline-flex items-center justify-center shadow-lg border-2 border-cream ${className}`}
     >
-      <span className="font-serif text-sm sm:text-base font-bold leading-none">{score.toFixed(1)}</span>
+      <span className="font-serif text-base sm:text-lg font-bold leading-none tabular-nums">{score.toFixed(1)}</span>
     </div>
   );
 }
@@ -28,6 +28,10 @@ function BookTile({ book, score }: { book: Book; score?: number }) {
   const [imageIndex, setImageIndex] = useState(0);
   const imageSrc = imageSources[imageIndex] || "";
   const pageCount = getExactPageCount(book);
+
+  useEffect(() => {
+    setImageIndex(0);
+  }, [book.id, imageSources.length]);
 
   return (
     <Link href={`/book/${book.id}`} className="block flex-shrink-0">
@@ -76,6 +80,10 @@ function FeaturedBook({
   const imageSources = useMemo(() => (book ? getBookCoverCandidates(book) : []), [book]);
   const [imageIndex, setImageIndex] = useState(0);
   const imageSrc = imageSources[imageIndex] || "";
+
+  useEffect(() => {
+    setImageIndex(0);
+  }, [book?.id, imageSources.length]);
 
   if (!book) {
     return (

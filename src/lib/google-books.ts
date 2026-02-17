@@ -69,25 +69,26 @@ export function getBookCoverUrl(result: GoogleBooksResult): string | null {
   const links = result.volumeInfo.imageLinks;
   if (!links) return null;
 
-  // Try high-res variants first (only available from the volume detail endpoint)
-  const highRes = links.extraLarge || links.large || links.medium;
-  if (highRes) {
-    return highRes.replace("http://", "https://");
-  }
+  const sources = [
+    links.extraLarge,
+    links.large,
+    links.medium,
+    links.thumbnail,
+    links.small,
+    links.smallThumbnail,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
 
-  // Fall back to thumbnail with zoom=3 for higher resolution
-  const url = links.thumbnail || links.smallThumbnail || null;
-  if (url) {
-    return url.replace("http://", "https://").replace("zoom=1", "zoom=3");
-  }
-  return null;
+  if (sources.length === 0) return null;
+
+  // Prefer highest quality first and request a larger thumbnail when needed.
+  return sources[0].replace("http://", "https://").replace("zoom=1", "zoom=3");
 }
 
 export function getThumbnailUrl(result: GoogleBooksResult): string | null {
   const links = result.volumeInfo.imageLinks;
   if (!links) return null;
-  return (links.smallThumbnail || links.thumbnail || "").replace(
-    "http://",
-    "https://"
-  );
+
+  const thumb = links.smallThumbnail || links.thumbnail || links.small || links.medium || null;
+  if (!thumb) return null;
+  return thumb.replace("http://", "https://");
 }

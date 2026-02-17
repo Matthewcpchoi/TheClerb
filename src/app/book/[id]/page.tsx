@@ -232,7 +232,7 @@ export default function BookDetailPage() {
       {/* Book Header */}
       <div className="flex flex-col md:flex-row items-start gap-8 mb-10">
         <div className="flex-shrink-0 relative">
-          {coverSources[coverIndex] && (
+          {coverSources[coverIndex] ? (
             <img
               src={coverSources[coverIndex]}
               alt={book.title}
@@ -240,6 +240,13 @@ export default function BookDetailPage() {
               referrerPolicy="no-referrer"
               onError={() => setCoverIndex((prev) => prev + 1)}
             />
+          ) : (
+            <div
+              className="w-48 h-72 rounded-lg shadow-xl flex items-center justify-center p-4"
+              style={{ backgroundColor: book.spine_color || "#3C1518" }}
+            >
+              <p className="font-serif text-cream text-lg text-center leading-tight">{book.title}</p>
+            </div>
           )}
           {/* Club Score Badge */}
           {(() => {
