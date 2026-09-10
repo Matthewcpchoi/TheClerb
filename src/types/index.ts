@@ -12,6 +12,7 @@ export interface Book {
   thumbnail_url: string | null;
   spine_color: string | null;
   google_books_id: string | null;
+  isbn: string | null;
   description?: string | null;
   total_pages: number | null;
   status: "reading" | "completed" | "upcoming";

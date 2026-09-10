@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Member, Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
-import { getInitials, getAvatarColor, getExactPageCount, getBookCoverCandidates } from "@/lib/utils";
+import { getInitials, getAvatarColor, getExactPageCount } from "@/lib/utils";
+import BookCover from "@/components/BookCover";
 
 interface MemberRatingRow {
   member_id: string;
@@ -116,32 +117,13 @@ function MemberBookTile({
   book: Book;
   score: number | undefined;
 }) {
-  const imageSources = getBookCoverCandidates(book);
-  const [imageIndex, setImageIndex] = useState(0);
-  const imageSrc = imageSources[imageIndex] || "";
-
   return (
     <div className="text-center w-24 flex-shrink-0">
       <div
         className="relative transition-transform duration-200 hover:-translate-y-1 mx-auto"
         style={{ transform: "perspective(400px) rotateY(-3deg)", transformOrigin: "left center" }}
       >
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt={book.title}
-            className="w-24 h-36 object-cover rounded shadow-lg"
-            referrerPolicy="no-referrer"
-            onError={() => setImageIndex((prev) => prev + 1)}
-          />
-        ) : (
-          <div
-            className="w-24 h-36 rounded shadow-lg flex items-center justify-center p-2"
-            style={{ backgroundColor: book.spine_color || "#3C1518" }}
-          >
-            <p className="font-serif text-cream text-xs text-center leading-tight">{book.title}</p>
-          </div>
-        )}
+        <BookCover book={book} className="w-24 h-36 rounded shadow-lg" />
         <div className="absolute inset-0 rounded bg-gradient-to-r from-black/10 to-transparent pointer-events-none" />
       </div>
       <p className="font-serif text-sm text-charcoal mt-2 truncate">{book.title}</p>

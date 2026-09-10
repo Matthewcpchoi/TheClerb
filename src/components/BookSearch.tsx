@@ -8,13 +8,43 @@ import {
   getThumbnailUrl,
   getISBN,
 } from "@/lib/google-books";
-import {
-  fetchOpenLibraryByISBN,
-  getOpenLibraryCoverByISBN,
-} from "@/lib/open-library";
-import { extractDominantColor } from "@/lib/color-extract";
+import { fetchOpenLibraryByISBN } from "@/lib/open-library";
+import { openLibraryCoverUrl, googleCoverUrl } from "@/lib/covers";
+import { getDeterministicSpineColor } from "@/lib/color-extract";
 import { supabase } from "@/lib/supabase";
 import { GoogleBooksResult, Book } from "@/types";
+
+/**
+ * Columns that may not exist yet on an older `books` table. PostgREST reports
+ * a missing column as PGRST204 and names it in the message, so we drop the
+ * offending column and retry rather than failing the whole insert.
+ */
+const OPTIONAL_BOOK_COLUMNS = ["isbn", "page_count"] as const;
+
+async function insertBook(bookData: Record<string, unknown>) {
+  const payload = { ...bookData };
+
+  for (let attempt = 0; attempt <= OPTIONAL_BOOK_COLUMNS.length; attempt++) {
+    const { data, error } = await supabase
+      .from("books")
+      .insert(payload)
+      .select()
+      .single();
+
+    if (!error) return { data, error: null };
+
+    const missing = OPTIONAL_BOOK_COLUMNS.find(
+      (col) => col in payload && error.message.includes(col)
+    );
+    if (!missing) {
+      console.error("[supabase] insert book:", error.message, error.code);
+      return { data: null, error };
+    }
+    delete payload[missing];
+  }
+
+  return { data: null, error: null };
+}
 
 interface BookSearchProps {
   memberId: string;
@@ -79,9 +109,9 @@ export default function BookSearch({
     const isbn = getISBN(vol);
     if (isbn) {
       if (!coverUrl) {
-        coverUrl = getOpenLibraryCoverByISBN(isbn, "L");
+        coverUrl = openLibraryCoverUrl(isbn, "L");
         if (!thumbnailUrl) {
-          thumbnailUrl = getOpenLibraryCoverByISBN(isbn, "M");
+          thumbnailUrl = openLibraryCoverUrl(isbn, "M");
         }
       }
 
@@ -90,22 +120,10 @@ export default function BookSearch({
           const olData = await fetchOpenLibraryByISBN(isbn);
           if (olData?.number_of_pages && olData.number_of_pages > 0) {
             pageCount = olData.number_of_pages;
-            console.log(
-              `[Open Library] Backfilled page count for "${vol.volumeInfo.title}": ${pageCount}`
-            );
           }
         } catch {
           /* skip */
         }
-      }
-    }
-
-    let spineColor = "#3C1518";
-    if (thumbnailUrl) {
-      try {
-        spineColor = await extractDominantColor(thumbnailUrl);
-      } catch {
-        // Use default
       }
     }
 
@@ -114,7 +132,10 @@ export default function BookSearch({
       author: vol.volumeInfo.authors?.join(", ") || null,
       cover_url: coverUrl,
       thumbnail_url: thumbnailUrl,
-      spine_color: spineColor,
+      // Persisting the ISBN is what makes the Open Library fallback reachable
+      // at render time, not just at insert time.
+      isbn,
+      spine_color: getDeterministicSpineColor(vol.volumeInfo.title),
       google_books_id: result.id,
       status: "upcoming",
       added_by: memberId,
@@ -123,23 +144,9 @@ export default function BookSearch({
       bookData.page_count = pageCount;
     }
 
-    let { data, error } = await supabase
-      .from("books")
-      .insert(bookData)
-      .select()
-      .single();
+    const { data } = await insertBook(bookData);
 
-    // If page_count column doesn't exist, retry without it
-    if (error && bookData.page_count) {
-      delete bookData.page_count;
-      ({ data, error } = await supabase
-        .from("books")
-        .insert(bookData)
-        .select()
-        .single());
-    }
-
-    if (data && !error) {
+    if (data) {
       onBookAdded(data);
     }
     setIsAdding(null);
@@ -205,12 +212,14 @@ export default function BookSearch({
                 >
                   {result.volumeInfo.imageLinks?.smallThumbnail ? (
                     <img
-                      src={result.volumeInfo.imageLinks.smallThumbnail.replace(
-                        "http://",
-                        "https://"
-                      )}
+                      src={
+                        googleCoverUrl(
+                          result.volumeInfo.imageLinks.smallThumbnail,
+                          1
+                        ) || result.volumeInfo.imageLinks.smallThumbnail
+                      }
                       alt={result.volumeInfo.title}
-                      className="w-12 h-18 object-cover rounded shadow flex-shrink-0"
+                      className="w-12 h-16 object-contain rounded shadow flex-shrink-0"
                       referrerPolicy="no-referrer"
                     />
                   ) : (

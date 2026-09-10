@@ -2,8 +2,9 @@
 
 import { Book } from "@/types";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { getBookCoverCandidates, getExactPageCount } from "@/lib/utils";
+import { useMemo } from "react";
+import { getExactPageCount } from "@/lib/utils";
+import BookCover from "./BookCover";
 
 interface BookShelfProps {
   currentBook: Book | null;
@@ -24,31 +25,16 @@ function ScoreBadge({ score, className = "bg-gold" }: { score: number; className
 }
 
 function BookTile({ book, score }: { book: Book; score?: number }) {
-  const imageSources = useMemo(() => getBookCoverCandidates(book), [book]);
-  const [imageIndex, setImageIndex] = useState(0);
-  const imageSrc = imageSources[imageIndex] || "";
   const pageCount = getExactPageCount(book);
 
   return (
     <Link href={`/book/${book.id}`} className="block flex-shrink-0">
       <div className="text-center w-24 sm:w-28">
         <div className="relative cursor-pointer transition-transform duration-200 hover:-translate-y-1 mx-auto">
-          <div
-            className="w-24 h-36 sm:w-28 sm:h-40 rounded shadow-lg flex items-center justify-center p-2"
-            style={{ backgroundColor: book.spine_color || "#3C1518" }}
-          >
-            {imageSrc ? (
-              <img
-                src={imageSrc}
-                alt={book.title}
-                className="absolute inset-0 w-full h-full object-cover rounded"
-                style={{ color: "transparent" }}
-                referrerPolicy="no-referrer"
-                onError={() => setImageIndex((prev) => prev + 1)}
-              />
-            ) : null}
-            <p className="font-serif text-cream text-xs text-center leading-tight">{book.title}</p>
-          </div>
+          <BookCover
+            book={book}
+            className="w-24 h-36 sm:w-28 sm:h-40 rounded shadow-lg"
+          />
           {typeof score === "number" && <ScoreBadge score={score} />}
         </div>
         <p className="font-serif text-sm text-cream mt-2 line-clamp-2 min-h-10">{book.title}</p>
@@ -73,10 +59,6 @@ function FeaturedBook({
   dim?: boolean;
   scoreBadgeClassName: string;
 }) {
-  const imageSources = useMemo(() => (book ? getBookCoverCandidates(book) : []), [book]);
-  const [imageIndex, setImageIndex] = useState(0);
-  const imageSrc = imageSources[imageIndex] || "";
-
   if (!book) {
     return (
       <div className="text-center">
@@ -92,28 +74,11 @@ function FeaturedBook({
     <Link href={`/book/${book.id}`} className="block text-center">
       <p className="font-serif text-sm tracking-wide mb-2 text-cream/95">{title}</p>
       <div className="inline-block relative">
-        <div
-          className="w-20 h-28 sm:w-24 sm:h-36 rounded shadow-xl flex items-center justify-center p-2"
-          style={{
-            backgroundColor: book.spine_color || "#3C1518",
-            ...(dim ? { filter: "saturate(0.65) brightness(0.85)" } : {}),
-          }}
-        >
-          {imageSrc ? (
-            <img
-              src={imageSrc}
-              alt={book.title}
-              className="absolute inset-0 w-full h-full object-cover rounded"
-              style={{
-                color: "transparent",
-                ...(dim ? { filter: "saturate(0.65) brightness(0.85)" } : {}),
-              }}
-              referrerPolicy="no-referrer"
-              onError={() => setImageIndex((prev) => prev + 1)}
-            />
-          ) : null}
-          <p className="font-serif text-cream text-xs text-center">{book.title}</p>
-        </div>
+        <BookCover
+          book={book}
+          className="w-20 h-28 sm:w-24 sm:h-36 rounded shadow-xl"
+          style={dim ? { filter: "saturate(0.65) brightness(0.85)" } : undefined}
+        />
         <ScoreBadge score={resolvedScore} className={scoreBadgeClassName} />
       </div>
     </Link>

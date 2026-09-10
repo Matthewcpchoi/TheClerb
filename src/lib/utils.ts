@@ -62,58 +62,5 @@ export function getExactPageCount(book: { page_count?: number | string | null; t
   return parsePageValue(book.page_count) ?? parsePageValue(book.total_pages);
 }
 
-function normalizeCoverUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  const trimmed = url.trim().replace(/&amp;/g, "&");
-  if (!trimmed) return null;
-  if (trimmed.startsWith("//")) return `https:${trimmed}`;
-  if (trimmed.startsWith("http://")) return `https://${trimmed.slice(7)}`;
-  return trimmed;
-}
-
-function getGoogleCoverVariants(url: string): string[] {
-  if (!url.includes("books.google")) return [url];
-
-  const variants = new Set<string>([url]);
-
-  for (const zoom of [3, 2, 1, 0]) {
-    variants.add(url.replace(/zoom=\d/, `zoom=${zoom}`));
-  }
-
-  // Google sometimes fails with edge=curl in some contexts.
-  variants.add(url.replace(/([?&])edge=curl&?/, "$1").replace(/[?&]$/, ""));
-
-  // Also try variants with both zoom adjustments and edge removed.
-  for (const value of Array.from(variants)) {
-    variants.add(value.replace(/([?&])edge=curl&?/, "$1").replace(/[?&]$/, ""));
-  }
-
-  return Array.from(variants);
-}
-
-/**
- * Returns an ordered list of cover URLs to try, from best to worst quality.
- * Components should render the first URL and cascade via onError.
- *
- * For Google Books URLs the function generates additional variants so
- * the browser can fall back if one URL fails.
- */
-export function getBookCoverCandidates(book: {
-  thumbnail_url?: string | null;
-  cover_url?: string | null;
-}): string[] {
-  const cover = normalizeCoverUrl(book.cover_url);
-  const thumbnail = normalizeCoverUrl(book.thumbnail_url);
-
-  const candidates = new Set<string>();
-
-  for (const url of [cover, thumbnail]) {
-    if (!url) continue;
-    for (const variant of getGoogleCoverVariants(url)) {
-      candidates.add(variant);
-    }
-  }
-
-  return Array.from(candidates);
-}
+// Cover URL resolution now lives in src/lib/covers.ts.
 

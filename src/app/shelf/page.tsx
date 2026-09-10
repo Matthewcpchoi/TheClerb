@@ -6,7 +6,8 @@ import { Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
 import BookShelf from "@/components/BookShelf";
 import BookSearch from "@/components/BookSearch";
-import { getBookCoverCandidates } from "@/lib/utils";
+import BookCover from "@/components/BookCover";
+import { markCompleted } from "@/lib/books";
 
 export default function ShelfPage() {
   const { currentMember } = useMember();
@@ -40,27 +41,32 @@ export default function ShelfPage() {
       return;
     }
 
+    // One query for all books, not one per book.
+    const { data: ratings } = await supabase
+      .from("ratings")
+      .select("book_id, pre_rating, post_rating")
+      .in(
+        "book_id",
+        completed.map((b) => b.id)
+      )
+      .eq("is_visible", true);
+
+    const valuesByBook = new Map<string, number[]>();
+    for (const r of ratings || []) {
+      const value = r.post_rating ?? r.pre_rating;
+      if (value === null) continue;
+      valuesByBook.set(r.book_id, [...(valuesByBook.get(r.book_id) || []), value]);
+    }
+
     const ratingMap: Record<string, number> = {};
     const bookRatingRows: { book: Book; avg: number }[] = [];
 
     for (const book of completed) {
-      const { data: ratings } = await supabase
-        .from("ratings")
-        .select("pre_rating, post_rating")
-        .eq("book_id", book.id)
-        .eq("is_visible", true);
-
-      if (ratings && ratings.length > 0) {
-        const vals = ratings
-          .map((r) => r.post_rating ?? r.pre_rating)
-          .filter((v): v is number => v !== null);
-
-        if (vals.length > 0) {
-          const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-          ratingMap[book.id] = avg;
-          bookRatingRows.push({ book, avg });
-        }
-      }
+      const vals = valuesByBook.get(book.id);
+      if (!vals || vals.length === 0) continue;
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      ratingMap[book.id] = avg;
+      bookRatingRows.push({ book, avg });
     }
 
     setBookRatings(ratingMap);
@@ -104,14 +110,15 @@ export default function ShelfPage() {
     if (status === "reading") {
       const currentlyReading = books.find((b) => b.status === "reading");
       if (currentlyReading) {
-        await supabase
-          .from("books")
-          .update({ status: "completed" })
-          .eq("id", currentlyReading.id);
+        await markCompleted(currentlyReading.id);
       }
     }
 
-    await supabase.from("books").update({ status }).eq("id", bookId);
+    if (status === "completed") {
+      await markCompleted(bookId);
+    } else {
+      await supabase.from("books").update({ status }).eq("id", bookId);
+    }
     fetchBooks();
   }
 
@@ -148,7 +155,10 @@ export default function ShelfPage() {
                 key={book.id}
                 className="bg-white/50 rounded-xl border border-cream-dark p-4 flex items-start gap-3"
               >
-                {(book.cover_url || book.thumbnail_url) && <UpcomingBookCover book={book} />}
+                <BookCover
+                  book={book}
+                  className="w-12 h-16 rounded shadow-sm flex-shrink-0"
+                />
                 <div className="min-w-0 flex-1">
                   <p className="font-serif text-sm text-charcoal font-semibold truncate">
                     {book.title}
@@ -182,23 +192,5 @@ export default function ShelfPage() {
         />
       )}
     </div>
-  );
-}
-
-function UpcomingBookCover({ book }: { book: Book }) {
-  const imageSources = getBookCoverCandidates(book);
-  const [imageIndex, setImageIndex] = useState(0);
-  const imageSrc = imageSources[imageIndex] || "";
-
-  if (!imageSrc) return null;
-
-  return (
-    <img
-      src={imageSrc}
-      alt={book.title}
-      className="w-12 h-16 object-cover rounded shadow-sm flex-shrink-0"
-      referrerPolicy="no-referrer"
-      onError={() => setImageIndex((prev) => prev + 1)}
-    />
   );
 }
