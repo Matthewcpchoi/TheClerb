@@ -97,10 +97,6 @@ export function getBookCoverCandidates(book: CoverIdentifiers): string[] {
     if (u && !out.includes(u)) out.push(u);
   };
 
-  // Server-side multi-provider resolution first. The direct URLs below remain
-  // as a backstop in case the proxy route itself is unavailable.
-  push(proxyCoverUrl(book));
-
   const stored = [book.cover_url, book.thumbnail_url]
     .map(normalizeUrl)
     .filter((u): u is string => u !== null);
@@ -125,6 +121,13 @@ export function getBookCoverCandidates(book: CoverIdentifiers): string[] {
     push(openLibraryCoverUrl(book.isbn, "L"));
     push(openLibraryCoverUrl(book.isbn, "M"));
   }
+
+  // Server-side multi-provider resolution LAST, as a rescue for books none of
+  // the direct URLs can satisfy. It is deliberately not first: loading these
+  // images straight from the browser is the path that has always worked, and
+  // a server-side fetch from a datacenter IP is likelier to be refused by the
+  // provider than one from the reader's own device.
+  push(proxyCoverUrl(book));
 
   return out;
 }
