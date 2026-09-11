@@ -97,37 +97,43 @@ export function getBookCoverCandidates(book: CoverIdentifiers): string[] {
     if (u && !out.includes(u)) out.push(u);
   };
 
-  const stored = [book.cover_url, book.thumbnail_url]
-    .map(normalizeUrl)
-    .filter((u): u is string => u !== null);
+  const proxy = proxyCoverUrl(book);
 
-  for (const url of stored) {
-    if (isGoogleBooks(url)) {
-      for (const zoom of GOOGLE_ZOOM_ORDER) push(googleCoverUrl(url, zoom));
-    } else {
-      push(url); // already a usable direct URL
-    }
-  }
+  // The proxy comes first because it is the only place a provider's
+  // "image not available" placeholder can be detected. Google serves that
+  // placeholder with HTTP 200, so a browser <img> cannot distinguish it from
+  // real art and renders it happily; the proxy inspects the bytes and moves
+  // on to the next provider instead.
+  push(proxy);
 
-  // Reconstruct from the volume id when the stored URLs are unusable.
-  if (book.google_books_id) {
-    for (const zoom of GOOGLE_ZOOM_ORDER) {
-      push(googleCoverUrlFromId(book.google_books_id, zoom));
-    }
-  }
-
-  // Second source. Only reachable for books that have an ISBN stored.
+  // Open Library by ISBN is safe to hand the browser directly: with
+  // default=false a miss is a real 404, so onError advances the cascade.
   if (book.isbn) {
     push(openLibraryCoverUrl(book.isbn, "L"));
     push(openLibraryCoverUrl(book.isbn, "M"));
   }
 
-  // Server-side multi-provider resolution LAST, as a rescue for books none of
-  // the direct URLs can satisfy. It is deliberately not first: loading these
-  // images straight from the browser is the path that has always worked, and
-  // a server-side fetch from a datacenter IP is likelier to be refused by the
-  // provider than one from the reader's own device.
-  push(proxyCoverUrl(book));
+  const stored = [book.cover_url, book.thumbnail_url]
+    .map(normalizeUrl)
+    .filter((u): u is string => u !== null);
+
+  for (const url of stored) {
+    if (!isGoogleBooks(url)) {
+      push(url); // non-Google stored URL, already usable
+    } else if (!proxy) {
+      // Raw Google URLs only when the proxy cannot run at all. They are
+      // otherwise omitted deliberately: an unvalidated Google URL is exactly
+      // what puts the grey placeholder on the shelf, and the proxy already
+      // tries Google properly, with validation.
+      for (const zoom of GOOGLE_ZOOM_ORDER) push(googleCoverUrl(url, zoom));
+    }
+  }
+
+  if (book.google_books_id && !proxy) {
+    for (const zoom of GOOGLE_ZOOM_ORDER) {
+      push(googleCoverUrlFromId(book.google_books_id, zoom));
+    }
+  }
 
   return out;
 }

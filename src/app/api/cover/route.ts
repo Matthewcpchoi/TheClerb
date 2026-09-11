@@ -73,7 +73,16 @@ function readImageSize(
   return null; // unknown format — do not reject on this signal alone
 }
 
+/**
+ * Google's "image not available" placeholder is returned with HTTP 200 and a
+ * plausible cover-shaped size, so it has to be rejected on content. It is a
+ * flat two-tone graphic, which compresses far smaller than any real cover
+ * scan at the same dimensions.
+ */
+const GOOGLE_PLACEHOLDER_MAX_BYTES = 4500;
+
 function rejectionReason(
+  url: string,
   contentType: string,
   bytes: Uint8Array
 ): string | null {
@@ -85,6 +94,14 @@ function rejectionReason(
   if (size && (size.width < MIN_DIMENSION || size.height < MIN_DIMENSION)) {
     return `too small (${size.width}x${size.height})`;
   }
+
+  if (
+    url.includes("books.google.com") &&
+    bytes.length < GOOGLE_PLACEHOLDER_MAX_BYTES
+  ) {
+    return `likely "image not available" placeholder (${bytes.length}B)`;
+  }
+
   return null;
 }
 
@@ -131,7 +148,7 @@ export async function GET(request: NextRequest) {
 
         const contentType = res.headers.get("content-type") || "";
         const bytes = new Uint8Array(await res.arrayBuffer());
-        const reason = rejectionReason(contentType, bytes);
+        const reason = rejectionReason(url, contentType, bytes);
 
         if (reason) {
           attempts.push({ url, result: `rejected: ${reason}` });
