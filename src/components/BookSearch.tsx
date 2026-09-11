@@ -9,7 +9,7 @@ import {
   getISBN,
 } from "@/lib/google-books";
 import { fetchOpenLibraryByISBN } from "@/lib/open-library";
-import { openLibraryCoverUrl, googleCoverUrl } from "@/lib/covers";
+import { openLibraryCoverUrl, googleCoverUrl, resolveCoverUrl } from "@/lib/covers";
 import { getDeterministicSpineColor } from "@/lib/color-extract";
 import { supabase } from "@/lib/supabase";
 import { GoogleBooksResult, Book } from "@/types";
@@ -125,6 +125,20 @@ export default function BookSearch({
           /* skip */
         }
       }
+    }
+
+    // Resolve the work's cover once, now, and store the winner. Doing this at
+    // add time means the shelf renders a plain <img> rather than re-running
+    // provider resolution on every view.
+    const resolved = await resolveCoverUrl({
+      google_books_id: result.id,
+      isbn,
+      title: vol.volumeInfo.title,
+      author: vol.volumeInfo.authors?.join(", ") || null,
+    });
+    if (resolved) {
+      coverUrl = resolved;
+      thumbnailUrl = resolved;
     }
 
     const bookData: Record<string, unknown> = {

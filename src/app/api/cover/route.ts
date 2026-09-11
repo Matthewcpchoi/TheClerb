@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import {
-  directCoverCandidates,
+  workCoverCandidates,
   searchCoverCandidates,
   lastResortCandidates,
   type CoverQuery,
@@ -124,6 +124,12 @@ export async function GET(request: NextRequest) {
     author: params.get("author"),
   };
 
+  // `resolve=1` returns the winning URL as JSON instead of the image bytes,
+  // so it can be stored on the book at add time and rendered directly
+  // thereafter — resolution happens once, not on every page view.
+  const resolveOnly = params.get("resolve") === "1";
+  let winningUrl: string | null = null;
+
   const timeLeft = () => TOTAL_BUDGET_MS - (Date.now() - startedAt);
 
   async function tryCandidates(urls: string[]): Promise<Response | null> {
@@ -157,7 +163,9 @@ export async function GET(request: NextRequest) {
         }
 
         attempts.push({ url, result: `OK (${bytes.length}B ${contentType})` });
+        winningUrl = url;
         if (debug) return null; // keep going so debug lists every attempt
+        if (resolveOnly) return new Response(null, { status: 204 });
 
         return new Response(bytes, {
           status: 200,
@@ -175,18 +183,20 @@ export async function GET(request: NextRequest) {
     return null;
   }
 
-  // Phase 1: Open Library by ISBN — exact, fast, and never a placeholder.
-  let hit = await tryCandidates(directCoverCandidates(query));
+  // Phase 1: the work's own cover, resolved from the ISBN. This is the art
+  // readers recognise, as opposed to whichever edition the ISBN names.
+  const workCandidates = await workCoverCandidates(query);
+  let hit = await tryCandidates(workCandidates);
 
-  // Phase 2: title/author searches across Open Library and Apple Books.
+  // Phase 2: verified title/author searches, still work-level.
   let searched: string[] = [];
   if (!hit && timeLeft() > 1500) {
     searched = await searchCoverCandidates(query);
     hit = await tryCandidates(searched);
   }
 
-  // Phase 3: Google's volume art, last, since it is the provider that answers
-  // with placeholders and interior page scans.
+  // Phase 3: edition-specific and Google volume art — right book, often not
+  // the recognisable cover, so only once everything above has missed.
   const lastResort = lastResortCandidates(query);
   if (!hit && timeLeft() > 800) {
     hit = await tryCandidates(lastResort);
@@ -198,7 +208,7 @@ export async function GET(request: NextRequest) {
         query,
         elapsedMs: Date.now() - startedAt,
         budgetMs: TOTAL_BUDGET_MS,
-        directCandidates: directCoverCandidates(query),
+        workCandidates,
         searchCandidates: searched,
         lastResortCandidates: lastResort,
         attempts,
@@ -206,6 +216,13 @@ export async function GET(request: NextRequest) {
           ? "at least one provider returned a usable cover"
           : "no provider returned a usable cover",
       },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
+  if (resolveOnly) {
+    return Response.json(
+      { url: winningUrl },
       { headers: { "Cache-Control": "no-store" } }
     );
   }

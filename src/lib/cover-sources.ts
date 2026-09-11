@@ -1,14 +1,20 @@
 /**
- * Server-side cover resolution across multiple providers.
+ * Server-side cover resolution.
  *
- * This runs on the server, not in the browser, which is what makes it more
- * reliable than hotlinking Google Books directly:
- *  - no CORS, referrer or hotlink-blocking constraints
- *  - responses can be inspected before being handed to the browser, so
- *    provider "no cover available" placeholders can be rejected
- *  - a title/author search can find covers for books with no ISBN
+ * The governing idea is the distinction between a *work* and an *edition*.
+ * "The Women" is one work with dozens of editions — US hardcover, UK
+ * paperback, large print, translations, audiobook — and every edition carries
+ * its own ISBN and its own cover art.
  *
- * Providers are ordered by observed reliability for book cover art.
+ * Asking a provider for the cover of a specific ISBN returns that edition's
+ * art, which is frequently not the cover anyone recognises. Goodreads and
+ * similar apps resolve to the work and show its primary edition instead, so
+ * that is what this module does:
+ *
+ *   1. resolve the ISBN to a work, and take the work's own cover
+ *   2. search by title/author, verifying the result really is this book,
+ *      and take the work-level cover from the match
+ *   3. only then fall back to edition-specific and Google volume art
  */
 
 const FETCH_TIMEOUT_MS = 2500;
@@ -33,6 +39,60 @@ async function fetchJson(url: string): Promise<unknown | null> {
   }
 }
 
+// ---------------------------------------------------------------- matching
+
+/** Strip case, punctuation, subtitles and leading articles for comparison. */
+function normalizeTitle(raw: string): string {
+  return raw
+    .toLowerCase()
+    .split(/[:(]/)[0] // drop subtitle and parenthetical edition notes
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/^(the|a|an)\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeAuthor(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Whether a provider result is actually the book we asked for. Taking the
+ * first search hit unverified is how a search lands on a study guide, a
+ * boxed set, or an unrelated book with a similar title.
+ */
+function isMatch(
+  query: CoverQuery,
+  candidateTitle?: string,
+  candidateAuthors?: string[]
+): boolean {
+  if (!query.title || !candidateTitle) return false;
+
+  const wanted = normalizeTitle(query.title);
+  const got = normalizeTitle(candidateTitle);
+  if (!wanted || !got) return false;
+  if (wanted !== got && !got.startsWith(wanted) && !wanted.startsWith(got)) {
+    return false;
+  }
+
+  // Title agrees. If we know the author, at least one surname should too.
+  if (!query.author || !candidateAuthors?.length) return true;
+
+  const wantedParts = normalizeAuthor(query.author).split(" ").filter(Boolean);
+  const wantedSurname = wantedParts[wantedParts.length - 1];
+  if (!wantedSurname) return true;
+
+  return candidateAuthors.some((a) =>
+    normalizeAuthor(a).split(" ").includes(wantedSurname)
+  );
+}
+
+// ---------------------------------------------------------------- providers
+
 function googleContentUrl(volumeId: string, zoom: number): string {
   return (
     "https://books.google.com/books/content" +
@@ -40,165 +100,151 @@ function googleContentUrl(volumeId: string, zoom: number): string {
   );
 }
 
-/** Open Library covers. `default=false` makes a miss 404 instead of a blank GIF. */
+/** `default=false` makes a miss a real 404 rather than a blank GIF. */
+function openLibraryById(coverId: number, size: "L" | "M" = "L"): string {
+  return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg?default=false`;
+}
+
+function openLibraryByOlid(olid: string, size: "L" | "M" = "L"): string {
+  return `https://covers.openlibrary.org/b/olid/${encodeURIComponent(olid)}-${size}.jpg?default=false`;
+}
+
 function openLibraryByIsbn(isbn: string, size: "L" | "M"): string {
   return `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-${size}.jpg?default=false`;
 }
 
-function openLibraryById(coverId: number, size: "L" | "M"): string {
-  return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg?default=false`;
+/**
+ * ISBN -> edition -> work -> the work's own cover.
+ *
+ * This is the step that fixes "right book, wrong art": the ISBN identifies one
+ * edition, but the work carries the primary cover that readers recognise.
+ */
+async function openLibraryWorkCover(isbn: string): Promise<string[]> {
+  const edition = (await fetchJson(
+    `https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`
+  )) as { works?: { key?: string }[] } | null;
+
+  const workKey = edition?.works?.[0]?.key;
+  if (!workKey) return [];
+
+  const work = (await fetchJson(
+    `https://openlibrary.org${workKey}.json`
+  )) as { covers?: number[] } | null;
+
+  return (work?.covers ?? [])
+    .filter((id) => id > 0)
+    .slice(0, 2)
+    .map((id) => openLibraryById(id));
 }
 
 /**
- * Open Library search. Runs both a structured title/author query and a plain
- * free-text one — the structured form misses when the stored author string
- * does not match Open Library's spelling, which is common for recent titles.
+ * Open Library search, verified. `cover_i` is the work's primary cover and
+ * `cover_edition_key` its representative edition — both work-level answers,
+ * unlike a raw ISBN lookup.
  */
 async function openLibrarySearch(query: CoverQuery): Promise<string[]> {
   if (!query.title) return [];
 
-  const structured = new URLSearchParams({
-    title: query.title,
-    limit: "5",
-    fields: "cover_i",
-  });
-  if (query.author) structured.set("author", query.author);
-
-  const freeText = new URLSearchParams({
+  const params = new URLSearchParams({
     q: [query.title, query.author].filter(Boolean).join(" "),
-    limit: "5",
-    fields: "cover_i",
+    limit: "8",
+    fields: "title,author_name,cover_i,cover_edition_key",
   });
 
-  type Docs = { docs?: { cover_i?: number }[] } | null;
-  const [a, b] = await Promise.all([
-    fetchJson(`https://openlibrary.org/search.json?${structured}`) as Promise<Docs>,
-    fetchJson(`https://openlibrary.org/search.json?${freeText}`) as Promise<Docs>,
-  ]);
+  const data = (await fetchJson(
+    `https://openlibrary.org/search.json?${params}`
+  )) as {
+    docs?: {
+      title?: string;
+      author_name?: string[];
+      cover_i?: number;
+      cover_edition_key?: string;
+    }[];
+  } | null;
 
   const out: string[] = [];
-  for (const doc of [...(a?.docs ?? []), ...(b?.docs ?? [])]) {
-    if (doc.cover_i) out.push(openLibraryById(doc.cover_i, "L"));
+  for (const doc of data?.docs ?? []) {
+    if (!isMatch(query, doc.title, doc.author_name)) continue;
+    if (doc.cover_edition_key) out.push(openLibraryByOlid(doc.cover_edition_key));
+    if (doc.cover_i) out.push(openLibraryById(doc.cover_i));
   }
   return out;
 }
 
-/** Google Books search — a second chance when the stored volume id is stale. */
-async function googleBooksSearch(query: CoverQuery): Promise<string[]> {
-  if (!query.title) return [];
-
-  const terms = [`intitle:${query.title}`];
-  if (query.author) terms.push(`inauthor:${query.author}`);
-
-  const key =
-    process.env.NEXT_PUBLIC_GOOGLE_BOOKS_KEY ||
-    process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY ||
-    "";
-  const params = new URLSearchParams({
-    q: terms.join(" "),
-    maxResults: "3",
-    printType: "books",
-  });
-  if (key) params.set("key", key);
-
-  const data = (await fetchJson(
-    `https://www.googleapis.com/books/v1/volumes?${params}`
-  )) as { items?: { id?: string }[] } | null;
-
-  return (data?.items ?? [])
-    .map((item) => item.id)
-    .filter((id): id is string => Boolean(id))
-    .map((id) => googleContentUrl(id, 2));
-}
-
 /**
- * Apple Books search. Artwork is served from Apple's CDN with permissive
- * caching and no hotlink protection, and the 100x100 URL can be rewritten to
- * any size — a reliable last resort for mainstream titles.
+ * Apple Books, verified. Apple lists the current commercial edition, so its
+ * artwork is usually the cover in print today — a good work-level proxy.
  */
 async function appleBooksSearch(query: CoverQuery): Promise<string[]> {
   if (!query.title) return [];
 
   const term = [query.title, query.author].filter(Boolean).join(" ");
+  const params = new URLSearchParams({
+    term,
+    entity: "ebook",
+    country: "US",
+    limit: "10",
+  });
 
-  // Try the ebook catalogue, then an unfiltered search — some titles are not
-  // categorised as ebooks and are missed by the narrower query.
-  const queries = [
-    new URLSearchParams({ term, entity: "ebook", country: "US", limit: "5" }),
-    new URLSearchParams({ term, media: "ebook", country: "US", limit: "5" }),
-  ];
-
-  type Results = { results?: { artworkUrl100?: string }[] } | null;
-  const responses = await Promise.all(
-    queries.map(
-      (p) => fetchJson(`https://itunes.apple.com/search?${p}`) as Promise<Results>
-    )
-  );
+  const data = (await fetchJson(
+    `https://itunes.apple.com/search?${params}`
+  )) as {
+    results?: {
+      trackName?: string;
+      artistName?: string;
+      artworkUrl100?: string;
+    }[];
+  } | null;
 
   const out: string[] = [];
-  for (const data of responses) {
-    for (const r of data?.results ?? []) {
-      if (!r.artworkUrl100) continue;
-      // Apple serves any size from the same path; 100x100 is just the default.
-      // The suffix varies (100x100bb.jpg, 100x100bb-85.jpg), so match loosely.
-      out.push(r.artworkUrl100.replace(/\/\d+x\d+bb[^/]*$/, "/600x600bb.jpg"));
+  for (const r of data?.results ?? []) {
+    if (!r.artworkUrl100) continue;
+    if (!isMatch(query, r.trackName, r.artistName ? [r.artistName] : [])) {
+      continue;
     }
+    // Apple serves any size from the same path; the suffix form varies.
+    out.push(r.artworkUrl100.replace(/\/\d+x\d+bb[^/]*$/, "/600x600bb.jpg"));
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ phases
+
+/** Phase 1 — work-level art derived from the ISBN. */
+export async function workCoverCandidates(query: CoverQuery): Promise<string[]> {
+  if (!query.isbn) return [];
+  return openLibraryWorkCover(query.isbn);
+}
+
+/** Phase 2 — verified title/author searches, still work-level. */
+export async function searchCoverCandidates(
+  query: CoverQuery
+): Promise<string[]> {
+  const [openLibrary, apple] = await Promise.all([
+    openLibrarySearch(query),
+    appleBooksSearch(query),
+  ]);
+
+  const out: string[] = [];
+  for (const u of [...openLibrary, ...apple]) {
+    if (!out.includes(u)) out.push(u);
   }
   return out;
 }
 
 /**
- * Ordered cover URL candidates, best source first. Direct identifier lookups
- * come before searches, since a search can match the wrong edition.
+ * Phase 3 — edition-specific and Google volume art. Correct books, but often
+ * not the recognisable cover, so they only run when everything above misses.
  */
-export function directCoverCandidates(query: CoverQuery): string[] {
-  const candidates: string[] = [];
-  const push = (u: string) => {
-    if (u && !candidates.includes(u)) candidates.push(u);
-  };
-
-  // Open Library by ISBN only. Google's content endpoint is deliberately not
-  // here: it is the one provider that answers with something other than the
-  // cover — a placeholder, or a scanned interior page — so it is tried last,
-  // after the searches, rather than pre-empting a real cover from elsewhere.
-  if (query.isbn) {
-    push(openLibraryByIsbn(query.isbn, "L"));
-    push(openLibraryByIsbn(query.isbn, "M"));
-  }
-
-  return candidates;
-}
-
-/** Google's own volume art, tried only once every other source has missed. */
 export function lastResortCandidates(query: CoverQuery): string[] {
-  if (!query.googleBooksId) return [];
-  return [
-    googleContentUrl(query.googleBooksId, 2),
-    googleContentUrl(query.googleBooksId, 1),
-  ];
-}
-
-/**
- * Search-derived candidates. Only worth paying for when the direct lookups
- * above have already failed — each one costs an extra API round trip.
- */
-export async function searchCoverCandidates(
-  query: CoverQuery
-): Promise<string[]> {
-  const candidates: string[] = [];
-  const push = (u: string) => {
-    if (u && !candidates.includes(u)) candidates.push(u);
-  };
-
-  const [openLibrary, google, apple] = await Promise.all([
-    openLibrarySearch(query),
-    googleBooksSearch(query),
-    appleBooksSearch(query),
-  ]);
-
-  openLibrary.forEach(push);
-  apple.forEach(push);
-  google.forEach(push);
-
-  return candidates;
+  const out: string[] = [];
+  if (query.isbn) {
+    out.push(openLibraryByIsbn(query.isbn, "L"));
+    out.push(openLibraryByIsbn(query.isbn, "M"));
+  }
+  if (query.googleBooksId) {
+    out.push(googleContentUrl(query.googleBooksId, 2));
+    out.push(googleContentUrl(query.googleBooksId, 1));
+  }
+  return out;
 }

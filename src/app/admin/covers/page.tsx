@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Book } from "@/types";
 import { fetchVolumeById, searchBooks, getISBN } from "@/lib/google-books";
-import { getBookCoverCandidates } from "@/lib/covers";
+import { getBookCoverCandidates, resolveCoverUrl } from "@/lib/covers";
 import BookCover from "@/components/BookCover";
 
 /**
@@ -41,7 +41,7 @@ function bestImageLink(links?: Record<string, string>): string | null {
 }
 
 interface DebugResponse {
-  directCandidates?: string[];
+  workCandidates?: string[];
   searchCandidates?: string[];
   lastResortCandidates?: string[];
 }
@@ -73,7 +73,7 @@ function CoverPicker({
       const res = await fetch(`/api/cover?${params}`);
       const data: DebugResponse = await res.json();
       setOptions([
-        ...(data.directCandidates || []),
+        ...(data.workCandidates || []),
         ...(data.searchCandidates || []),
         ...(data.lastResortCandidates || []),
       ]);
@@ -170,8 +170,17 @@ export default function CoverRepairPage() {
       return { ...row, state: "failed", note: "no matching volume found" };
     }
 
-    const coverUrl = bestImageLink(volume.volumeInfo.imageLinks);
     const isbn = getISBN(volume);
+
+    // Work-level resolution, the same path the add flow uses. Falls back to
+    // Google's volume art only if every other provider misses.
+    const coverUrl =
+      (await resolveCoverUrl({
+        google_books_id: volume.id,
+        isbn,
+        title: volume.volumeInfo.title,
+        author: volume.volumeInfo.authors?.join(", ") || null,
+      })) || bestImageLink(volume.volumeInfo.imageLinks);
 
     if (!coverUrl && !isbn) {
       return { ...row, state: "failed", note: "no cover or ISBN available" };

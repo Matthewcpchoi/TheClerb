@@ -90,6 +90,25 @@ export function proxyCoverUrl(book: CoverIdentifiers): string | null {
   return qs ? `/api/cover?${qs}` : null;
 }
 
+/**
+ * Ask the server to resolve this book's cover and return the winning URL.
+ * Used at add time so the resolved cover is stored on the row.
+ */
+export async function resolveCoverUrl(
+  book: CoverIdentifiers
+): Promise<string | null> {
+  const base = proxyCoverUrl(book);
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}&resolve=1`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { url?: string | null };
+    return data.url ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Ordered best -> worst. Render the first; advance on failure. */
 export function getBookCoverCandidates(book: CoverIdentifiers): string[] {
   const out: string[] = [];
