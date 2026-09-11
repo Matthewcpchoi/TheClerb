@@ -16,7 +16,7 @@
 // most volumes, with 1 as the reliable fallback. See docs/AUDIT_AND_FIXES.md.
 const GOOGLE_ZOOM_ORDER = [2, 1, 3, 0];
 
-function isGoogleBooks(url: string): boolean {
+export function isGoogleBooks(url: string): boolean {
   try {
     return new URL(url).hostname.endsWith("books.google.com");
   } catch {

@@ -7,7 +7,7 @@ import { useMember } from "@/components/MemberProvider";
 import BookShelf from "@/components/BookShelf";
 import BookSearch from "@/components/BookSearch";
 import { Button, PageHeader } from "@/components/ui";
-import { markCompleted } from "@/lib/books";
+import { markCompleted, healUnresolvedCovers } from "@/lib/books";
 
 export default function ShelfPage() {
   const { currentMember } = useMember();
@@ -25,6 +25,12 @@ export default function ShelfPage() {
     if (data) {
       setBooks(data);
       await computeRatings(data);
+      // Older rows may still hold an unresolved cover; fix them in the
+      // background and refresh once if anything changed.
+      if (await healUnresolvedCovers(data)) {
+        const { data: fresh } = await supabase.from("books").select("*").order("created_at", { ascending: false });
+        if (fresh) setBooks(fresh);
+      }
     }
   }, []);
 
