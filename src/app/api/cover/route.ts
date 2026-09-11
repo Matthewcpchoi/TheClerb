@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import {
   directCoverCandidates,
   searchCoverCandidates,
+  lastResortCandidates,
   type CoverQuery,
 } from "@/lib/cover-sources";
 
@@ -16,7 +17,7 @@ export const maxDuration = 20;
  */
 const TOTAL_BUDGET_MS = 7000;
 const IMAGE_TIMEOUT_MS = 2500;
-const MAX_CANDIDATES = 8;
+const MAX_CANDIDATES = 10;
 
 /**
  * Providers return their "no cover available" placeholder with HTTP 200, so a
@@ -174,15 +175,21 @@ export async function GET(request: NextRequest) {
     return null;
   }
 
-  // Phase 1: exact identifier lookups. No search round trip, so books with an
-  // ISBN or volume id answer fast and never reach the slower phase.
+  // Phase 1: Open Library by ISBN — exact, fast, and never a placeholder.
   let hit = await tryCandidates(directCoverCandidates(query));
 
-  // Phase 2: title/author searches, only if phase 1 found nothing.
+  // Phase 2: title/author searches across Open Library and Apple Books.
   let searched: string[] = [];
   if (!hit && timeLeft() > 1500) {
     searched = await searchCoverCandidates(query);
     hit = await tryCandidates(searched);
+  }
+
+  // Phase 3: Google's volume art, last, since it is the provider that answers
+  // with placeholders and interior page scans.
+  const lastResort = lastResortCandidates(query);
+  if (!hit && timeLeft() > 800) {
+    hit = await tryCandidates(lastResort);
   }
 
   if (debug) {
@@ -193,6 +200,7 @@ export async function GET(request: NextRequest) {
         budgetMs: TOTAL_BUDGET_MS,
         directCandidates: directCoverCandidates(query),
         searchCandidates: searched,
+        lastResortCandidates: lastResort,
         attempts,
         verdict: attempts.some((a) => a.result.startsWith("OK"))
           ? "at least one provider returned a usable cover"

@@ -49,23 +49,35 @@ function openLibraryById(coverId: number, size: "L" | "M"): string {
   return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg?default=false`;
 }
 
-/** Open Library search — finds a cover from title/author when no ISBN exists. */
+/**
+ * Open Library search. Runs both a structured title/author query and a plain
+ * free-text one — the structured form misses when the stored author string
+ * does not match Open Library's spelling, which is common for recent titles.
+ */
 async function openLibrarySearch(query: CoverQuery): Promise<string[]> {
   if (!query.title) return [];
 
-  const params = new URLSearchParams({
+  const structured = new URLSearchParams({
     title: query.title,
-    limit: "3",
-    fields: "cover_i,isbn",
+    limit: "5",
+    fields: "cover_i",
   });
-  if (query.author) params.set("author", query.author);
+  if (query.author) structured.set("author", query.author);
 
-  const data = (await fetchJson(
-    `https://openlibrary.org/search.json?${params}`
-  )) as { docs?: { cover_i?: number; isbn?: string[] }[] } | null;
+  const freeText = new URLSearchParams({
+    q: [query.title, query.author].filter(Boolean).join(" "),
+    limit: "5",
+    fields: "cover_i",
+  });
+
+  type Docs = { docs?: { cover_i?: number }[] } | null;
+  const [a, b] = await Promise.all([
+    fetchJson(`https://openlibrary.org/search.json?${structured}`) as Promise<Docs>,
+    fetchJson(`https://openlibrary.org/search.json?${freeText}`) as Promise<Docs>,
+  ]);
 
   const out: string[] = [];
-  for (const doc of data?.docs ?? []) {
+  for (const doc of [...(a?.docs ?? []), ...(b?.docs ?? [])]) {
     if (doc.cover_i) out.push(openLibraryById(doc.cover_i, "L"));
   }
   return out;
@@ -108,20 +120,31 @@ async function appleBooksSearch(query: CoverQuery): Promise<string[]> {
   if (!query.title) return [];
 
   const term = [query.title, query.author].filter(Boolean).join(" ");
-  const params = new URLSearchParams({
-    term,
-    entity: "ebook",
-    limit: "3",
-  });
 
-  const data = (await fetchJson(
-    `https://itunes.apple.com/search?${params}`
-  )) as { results?: { artworkUrl100?: string }[] } | null;
+  // Try the ebook catalogue, then an unfiltered search — some titles are not
+  // categorised as ebooks and are missed by the narrower query.
+  const queries = [
+    new URLSearchParams({ term, entity: "ebook", country: "US", limit: "5" }),
+    new URLSearchParams({ term, media: "ebook", country: "US", limit: "5" }),
+  ];
 
-  return (data?.results ?? [])
-    .map((r) => r.artworkUrl100)
-    .filter((u): u is string => Boolean(u))
-    .map((u) => u.replace(/\/\d+x\d+bb\.(jpg|png)$/, "/600x600bb.jpg"));
+  type Results = { results?: { artworkUrl100?: string }[] } | null;
+  const responses = await Promise.all(
+    queries.map(
+      (p) => fetchJson(`https://itunes.apple.com/search?${p}`) as Promise<Results>
+    )
+  );
+
+  const out: string[] = [];
+  for (const data of responses) {
+    for (const r of data?.results ?? []) {
+      if (!r.artworkUrl100) continue;
+      // Apple serves any size from the same path; 100x100 is just the default.
+      // The suffix varies (100x100bb.jpg, 100x100bb-85.jpg), so match loosely.
+      out.push(r.artworkUrl100.replace(/\/\d+x\d+bb[^/]*$/, "/600x600bb.jpg"));
+    }
+  }
+  return out;
 }
 
 /**
@@ -134,16 +157,25 @@ export function directCoverCandidates(query: CoverQuery): string[] {
     if (u && !candidates.includes(u)) candidates.push(u);
   };
 
+  // Open Library by ISBN only. Google's content endpoint is deliberately not
+  // here: it is the one provider that answers with something other than the
+  // cover — a placeholder, or a scanned interior page — so it is tried last,
+  // after the searches, rather than pre-empting a real cover from elsewhere.
   if (query.isbn) {
     push(openLibraryByIsbn(query.isbn, "L"));
     push(openLibraryByIsbn(query.isbn, "M"));
   }
-  if (query.googleBooksId) {
-    push(googleContentUrl(query.googleBooksId, 2));
-    push(googleContentUrl(query.googleBooksId, 1));
-  }
 
   return candidates;
+}
+
+/** Google's own volume art, tried only once every other source has missed. */
+export function lastResortCandidates(query: CoverQuery): string[] {
+  if (!query.googleBooksId) return [];
+  return [
+    googleContentUrl(query.googleBooksId, 2),
+    googleContentUrl(query.googleBooksId, 1),
+  ];
 }
 
 /**
