@@ -99,11 +99,21 @@ export function getBookCoverCandidates(book: CoverIdentifiers): string[] {
 
   const proxy = proxyCoverUrl(book);
 
-  // The proxy comes first because it is the only place a provider's
-  // "image not available" placeholder can be detected. Google serves that
-  // placeholder with HTTP 200, so a browser <img> cannot distinguish it from
-  // real art and renders it happily; the proxy inspects the bytes and moves
-  // on to the next provider instead.
+  const stored = [book.cover_url, book.thumbnail_url]
+    .map(normalizeUrl)
+    .filter((u): u is string => u !== null);
+
+  // A stored non-Google URL is one somebody chose deliberately — a cover
+  // picked by hand on /admin/covers. It outranks everything, including the
+  // proxy, because automatic resolution is exactly what it is correcting.
+  for (const url of stored) {
+    if (!isGoogleBooks(url)) push(url);
+  }
+
+  // The proxy next: it is the only place a provider's "image not available"
+  // placeholder can be detected. Google serves that placeholder with HTTP 200,
+  // so a browser <img> cannot distinguish it from real art and renders it
+  // happily; the proxy inspects the bytes and moves on instead.
   push(proxy);
 
   // Open Library by ISBN is safe to hand the browser directly: with
@@ -113,14 +123,8 @@ export function getBookCoverCandidates(book: CoverIdentifiers): string[] {
     push(openLibraryCoverUrl(book.isbn, "M"));
   }
 
-  const stored = [book.cover_url, book.thumbnail_url]
-    .map(normalizeUrl)
-    .filter((u): u is string => u !== null);
-
   for (const url of stored) {
-    if (!isGoogleBooks(url)) {
-      push(url); // non-Google stored URL, already usable
-    } else if (!proxy) {
+    if (isGoogleBooks(url) && !proxy) {
       // Raw Google URLs only when the proxy cannot run at all. They are
       // otherwise omitted deliberately: an unvalidated Google URL is exactly
       // what puts the grey placeholder on the shelf, and the proxy already

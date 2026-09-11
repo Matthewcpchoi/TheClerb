@@ -40,6 +40,94 @@ function bestImageLink(links?: Record<string, string>): string | null {
   return raw ? raw.replace("http://", "https://") : null;
 }
 
+interface DebugResponse {
+  directCandidates?: string[];
+  searchCandidates?: string[];
+  lastResortCandidates?: string[];
+}
+
+/**
+ * Lets a wrong-but-valid cover be corrected by hand. Automatic resolution can
+ * return a real image that is simply the wrong edition's art, which no byte
+ * inspection can detect — only a person looking at it can.
+ */
+function CoverPicker({
+  book,
+  onChosen,
+}: {
+  book: Book;
+  onChosen: (url: string) => void;
+}) {
+  const [options, setOptions] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function loadOptions() {
+    setLoading(true);
+    const params = new URLSearchParams({ debug: "1" });
+    if (book.google_books_id) params.set("gid", book.google_books_id);
+    if (book.isbn) params.set("isbn", book.isbn);
+    if (book.title) params.set("title", book.title);
+    if (book.author) params.set("author", book.author);
+
+    try {
+      const res = await fetch(`/api/cover?${params}`);
+      const data: DebugResponse = await res.json();
+      setOptions([
+        ...(data.directCandidates || []),
+        ...(data.searchCandidates || []),
+        ...(data.lastResortCandidates || []),
+      ]);
+    } catch {
+      setOptions([]);
+    }
+    setLoading(false);
+  }
+
+  if (options === null) {
+    return (
+      <button
+        onClick={loadOptions}
+        disabled={loading}
+        className="px-3 py-1 rounded text-xs font-sans bg-gold/20 text-gold hover:bg-gold/30 transition-colors disabled:opacity-50"
+      >
+        {loading ? "Loading…" : "Pick cover"}
+      </button>
+    );
+  }
+
+  if (options.length === 0) {
+    return (
+      <span className="font-sans text-xs text-warm-brown/50">no options</span>
+    );
+  }
+
+  return (
+    <div className="w-full mt-3">
+      <p className="font-sans text-xs text-warm-brown/60 mb-2">
+        Tap the correct cover:
+      </p>
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {options.map((url) => (
+          <button
+            key={url}
+            onClick={() => onChosen(url)}
+            className="flex-shrink-0 rounded border-2 border-transparent hover:border-gold transition-colors"
+            title={url}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt="Cover option"
+              className="w-16 h-24 object-contain bg-cream-dark rounded"
+              referrerPolicy="no-referrer"
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CoverRepairPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [running, setRunning] = useState(false);
@@ -138,6 +226,28 @@ export default function CoverRepairPage() {
     setRunning(false);
   }
 
+  async function chooseCover(book: Book, url: string) {
+    const { error } = await supabase
+      .from("books")
+      .update({ cover_url: url, thumbnail_url: url })
+      .eq("id", book.id);
+
+    setRows((prev) =>
+      prev.map((r) =>
+        r.book.id === book.id
+          ? error
+            ? { ...r, state: "failed", note: error.message }
+            : {
+                ...r,
+                book: { ...r.book, cover_url: url, thumbnail_url: url },
+                state: "fixed",
+                note: "cover chosen by hand",
+              }
+          : r
+      )
+    );
+  }
+
   const missing = rows.filter(
     (r) => !r.book.cover_url && !r.book.thumbnail_url
   ).length;
@@ -163,7 +273,7 @@ export default function CoverRepairPage() {
         {rows.map((row) => (
           <div
             key={row.book.id}
-            className="flex items-center gap-3 p-3 rounded-lg border border-cream-dark bg-white/50"
+            className="flex flex-wrap items-center gap-3 p-3 rounded-lg border border-cream-dark bg-white/50"
           >
             <BookCover
               book={row.book}
@@ -195,6 +305,11 @@ export default function CoverRepairPage() {
             >
               {row.state}
             </span>
+
+            <CoverPicker
+              book={row.book}
+              onChosen={(url) => chooseCover(row.book, url)}
+            />
           </div>
         ))}
       </div>
