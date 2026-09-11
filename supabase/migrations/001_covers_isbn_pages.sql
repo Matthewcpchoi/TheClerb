@@ -15,13 +15,19 @@ CREATE INDEX IF NOT EXISTS books_isbn_idx ON books (isbn);
 ALTER TABLE books ADD COLUMN IF NOT EXISTS page_count integer;
 ALTER TABLE books ADD COLUMN IF NOT EXISTS completed_at timestamptz;
 
--- Consolidate the two page columns onto page_count.
-UPDATE books
-   SET page_count = total_pages
- WHERE page_count IS NULL
-   AND total_pages IS NOT NULL;
-
--- Prevent the same book being added to the shelf twice.
-CREATE UNIQUE INDEX IF NOT EXISTS books_google_books_id_key
-    ON books (google_books_id)
- WHERE google_books_id IS NOT NULL;
+-- Consolidate onto page_count, but only where total_pages actually exists.
+-- Some deployments never had that column, and an unguarded UPDATE naming a
+-- missing column aborts the whole transaction, rolling back the ALTERs above.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'books' AND column_name = 'total_pages'
+  ) THEN
+    EXECUTE '
+      UPDATE books
+         SET page_count = total_pages
+       WHERE page_count IS NULL
+         AND total_pages IS NOT NULL';
+  END IF;
+END $$;
