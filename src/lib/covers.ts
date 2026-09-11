@@ -69,6 +69,25 @@ export interface CoverIdentifiers {
   thumbnail_url?: string | null;
   isbn?: string | null;
   google_books_id?: string | null;
+  title?: string | null;
+  author?: string | null;
+}
+
+/**
+ * Our own proxy endpoint. It resolves across Open Library, Google Books and
+ * Apple Books server-side and rejects provider placeholders before they reach
+ * the browser, so it is tried before any direct provider URL.
+ */
+export function proxyCoverUrl(book: CoverIdentifiers): string | null {
+  const params = new URLSearchParams();
+  if (book.google_books_id) params.set("gid", book.google_books_id);
+  if (book.isbn) params.set("isbn", book.isbn);
+  if (book.title) params.set("title", book.title);
+  if (book.author) params.set("author", book.author);
+
+  // Nothing to search on.
+  const qs = params.toString();
+  return qs ? `/api/cover?${qs}` : null;
 }
 
 /** Ordered best -> worst. Render the first; advance on failure. */
@@ -77,6 +96,10 @@ export function getBookCoverCandidates(book: CoverIdentifiers): string[] {
   const push = (u: string | null | undefined) => {
     if (u && !out.includes(u)) out.push(u);
   };
+
+  // Server-side multi-provider resolution first. The direct URLs below remain
+  // as a backstop in case the proxy route itself is unavailable.
+  push(proxyCoverUrl(book));
 
   const stored = [book.cover_url, book.thumbnail_url]
     .map(normalizeUrl)

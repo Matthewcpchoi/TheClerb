@@ -33,7 +33,14 @@ export default function BookCover({
   const candidates = useMemo(
     () => getBookCoverCandidates(book),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [book.cover_url, book.thumbnail_url, book.isbn, book.google_books_id]
+    [
+      book.cover_url,
+      book.thumbnail_url,
+      book.isbn,
+      book.google_books_id,
+      book.title,
+      book.author,
+    ]
   );
   const [index, setIndex] = useState(0);
 
