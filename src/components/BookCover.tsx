@@ -15,7 +15,10 @@ interface BookCoverProps {
   book: CoverIdentifiers & { title: string; spine_color?: string | null };
   /** Sizing/rounding classes. Applied to the image and the fallback alike. */
   className?: string;
-  /** Covers vary in aspect ratio; "contain" avoids cropping the artwork. */
+  /**
+   * "cover" fills the frame edge to edge. Book covers are close enough to
+   * 2:3 that the crop is a sliver; letterboxing looked worse in practice.
+   */
   fit?: "contain" | "cover";
   eager?: boolean;
   style?: CSSProperties;
@@ -24,7 +27,7 @@ interface BookCoverProps {
 export default function BookCover({
   book,
   className = "",
-  fit = "contain",
+  fit = "cover",
   eager = false,
   style,
 }: BookCoverProps) {

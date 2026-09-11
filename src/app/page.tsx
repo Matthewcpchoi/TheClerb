@@ -1,249 +1,183 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Book, Meeting } from "@/types";
 import { formatDate, formatTime, getExactPageCount } from "@/lib/utils";
-import { fetchVolumeById, getISBN } from "@/lib/google-books";
-import { fetchOpenLibraryByISBN } from "@/lib/open-library";
 import BookCover from "@/components/BookCover";
-import Link from "next/link";
+import { Card, LinkButton, ScoreBadge, SectionTitle, StatusPill } from "@/components/ui";
+
+interface Stats {
+  totalBooks: number;
+  totalMembers: number;
+  avgRating: number | null;
+  totalPages: number | null;
+}
 
 export default function Home() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
+  const [currentScore, setCurrentScore] = useState<number | null>(null);
   const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
-  const [stats, setStats] = useState({
-    totalBooks: 0,
-    totalMembers: 0,
-    avgRating: null as number | null,
-    totalPages: null as number | null,
-  });
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    (async () => {
+      const today = new Date().toISOString().split("T")[0];
 
-  async function fetchData() {
-    // maybeSingle: an empty shelf is normal and must not surface as an error.
-    const { data: reading } = await supabase
-      .from("books")
-      .select("*")
-      .eq("status", "reading")
-      .limit(1)
-      .maybeSingle();
-    if (reading) setCurrentBook(reading);
+      const [{ data: reading }, { data: meetings }, { data: completed }, { count: memberCount }, { data: ratings }] =
+        await Promise.all([
+          supabase.from("books").select("*").eq("status", "reading").limit(1).maybeSingle(),
+          supabase
+            .from("meetings")
+            .select("*, book:books(*)")
+            .gte("date", today)
+            .order("date", { ascending: true })
+            .order("time", { ascending: true })
+            .limit(1),
+          supabase.from("books").select("*").eq("status", "completed"),
+          supabase.from("members").select("*", { count: "exact", head: true }),
+          supabase.from("ratings").select("book_id, pre_rating, post_rating").eq("is_visible", true),
+        ]);
 
-    const now = new Date().toISOString().split("T")[0];
-    const { data: meetings } = await supabase
-      .from("meetings")
-      .select("*, book:books(*)")
-      .gte("date", now)
-      .order("date", { ascending: true })
-      .order("time", { ascending: true })
-      .limit(1);
-    if (meetings && meetings.length > 0) setNextMeeting(meetings[0]);
+      if (reading) setCurrentBook(reading);
+      if (meetings && meetings.length > 0) setNextMeeting(meetings[0]);
 
-    // select("*") rather than naming columns: an older table may not have
-    // page_count yet, and naming a missing column fails the entire query.
-    const { data: completedBooks } = await supabase
-      .from("books")
-      .select("*")
-      .eq("status", "completed");
-
-    // Backfill page counts from Google Books + Open Library for books missing them
-    const booksToBackfill = (completedBooks || []).filter(
-      (b) => getExactPageCount(b) === null && b.google_books_id
-    );
-    await Promise.all(
-      booksToBackfill.map(async (b) => {
-        try {
-          const vol = await fetchVolumeById(b.google_books_id!);
-          let pc = vol?.volumeInfo?.pageCount;
-
-          // If Google Books doesn't have it, try Open Library via ISBN
-          if ((!pc || pc <= 0) && vol) {
-            const isbn = getISBN(vol);
-            if (isbn) {
-              const olData = await fetchOpenLibraryByISBN(isbn);
-              if (olData?.number_of_pages && olData.number_of_pages > 0) {
-                pc = olData.number_of_pages;
-              }
-            }
-          }
-
-          if (typeof pc === "number" && pc > 0) {
-            b.page_count = pc;
-            await supabase.from("books").update({ page_count: pc }).eq("id", b.id);
-          }
-        } catch { /* skip */ }
-      })
-    );
-
-    const allCompleted = completedBooks || [];
-    const pageValues = allCompleted
-      .map((b) => getExactPageCount(b))
-      .filter((v): v is number => typeof v === "number");
-
-    const totalPages = pageValues.length > 0
-      ? pageValues.reduce((sum, pages) => sum + pages, 0)
-      : null;
-
-    const { count: bookCount } = await supabase
-      .from("books")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "completed");
-
-    const { count: memberCount } = await supabase
-      .from("members")
-      .select("*", { count: "exact", head: true });
-
-    const { data: allRatings } = await supabase
-      .from("ratings")
-      .select("pre_rating, post_rating")
-      .eq("is_visible", true);
-
-    let avgRating: number | null = null;
-    if (allRatings && allRatings.length > 0) {
-      const vals = allRatings
+      const vals = (ratings || [])
         .map((r) => r.post_rating ?? r.pre_rating)
         .filter((v): v is number => v !== null);
-      if (vals.length > 0) {
-        avgRating = vals.reduce((a, b) => a + b, 0) / vals.length;
-      }
-    }
 
-    setStats({
-      totalBooks: bookCount || 0,
-      totalMembers: memberCount || 0,
-      avgRating,
-      totalPages,
-    });
-  }
+      if (reading) {
+        const mine = (ratings || [])
+          .filter((r) => r.book_id === reading.id)
+          .map((r) => r.post_rating ?? r.pre_rating)
+          .filter((v): v is number => v !== null);
+        if (mine.length) setCurrentScore(mine.reduce((a, b) => a + b, 0) / mine.length);
+      }
+
+      const pageValues = (completed || [])
+        .map((b) => getExactPageCount(b))
+        .filter((v): v is number => typeof v === "number");
+
+      setStats({
+        totalBooks: (completed || []).length,
+        totalMembers: memberCount || 0,
+        avgRating: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
+        totalPages: pageValues.length ? pageValues.reduce((a, b) => a + b, 0) : null,
+      });
+    })();
+  }, []);
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="text-center pt-4 pb-6">
-        <h1 className="font-script text-[46px] text-mahogany tracking-wide">
+    <div className="max-w-4xl mx-auto">
+      <div className="pt-2 pb-10 sm:pt-6 sm:pb-14">
+        <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-gold mb-3">
+          Book club
+        </p>
+        <h1 className="font-serif text-5xl sm:text-6xl text-charcoal tracking-tight leading-none">
           The Clerb
         </h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {currentBook ? (
-          <Link href={`/book/${currentBook.id}`} className="block h-full">
-            <div className="bg-white/50 rounded-xl border border-cream-dark p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
-              <p className="font-sans text-xs text-warm-brown/60 uppercase tracking-widest mb-4">
-                Currently Reading
-              </p>
-              <div className="flex items-start gap-4 flex-1">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+        {/* Currently reading — hero */}
+        <Card className="md:col-span-3 overflow-hidden" padded={false}>
+          {currentBook ? (
+            <Link href={`/book/${currentBook.id}`} className="flex gap-5 sm:gap-7 p-5 sm:p-7 group">
+              <div className="relative flex-shrink-0">
                 <BookCover
                   book={currentBook}
-                  className="w-20 h-28 rounded-lg shadow-lg flex-shrink-0"
+                  className="w-28 sm:w-36 aspect-[2/3] rounded-lg shadow-[0_4px_8px_rgba(43,38,34,0.15),0_20px_40px_-16px_rgba(43,38,34,0.45)] transition-transform group-hover:-translate-y-1"
                   eager
                 />
-                <div className="min-w-0">
-                  <h2 className="font-serif text-xl text-charcoal mb-1 leading-tight">
-                    {currentBook.title}
-                  </h2>
-                  {currentBook.author && (
-                    <p className="font-sans text-sm text-warm-brown">
-                      {currentBook.author}
-                    </p>
-                  )}
-                  {currentBook.page_count !== null && (
-                    <p className="font-sans text-xs text-warm-brown/50 mt-1">
-                      {currentBook.page_count} pages
-                    </p>
-                  )}
-                </div>
+                {currentScore !== null && (
+                  <ScoreBadge score={currentScore} size="lg" className="absolute -bottom-3 -right-3" />
+                )}
               </div>
-            </div>
-          </Link>
-        ) : (
-          <div className="bg-white/50 rounded-xl border border-cream-dark p-6 flex flex-col items-center justify-center h-full">
-            <p className="font-sans text-warm-brown/60 italic mb-3">
-              No book currently being read.
-            </p>
-            <Link
-              href="/shelf"
-              className="px-5 py-2 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
-            >
-              Visit The Shelf
+              <div className="min-w-0 flex-1 flex flex-col">
+                <StatusPill status="reading" />
+                <h2 className="font-serif text-2xl sm:text-3xl text-charcoal leading-tight tracking-tight mt-3 group-hover:text-mahogany transition-colors">
+                  {currentBook.title}
+                </h2>
+                {currentBook.author && (
+                  <p className="font-sans text-sm sm:text-base text-warm-brown mt-1.5">{currentBook.author}</p>
+                )}
+                <p className="font-sans text-xs text-gold mt-auto pt-4">Rate &amp; discuss →</p>
+              </div>
             </Link>
-          </div>
-        )}
+          ) : (
+            <div className="p-7 flex flex-col items-start gap-4">
+              <StatusPill status="reading" />
+              <p className="font-serif text-xl text-charcoal">Nothing on the go right now.</p>
+              <LinkButton href="/shelf" variant="secondary">
+                Pick the next book
+              </LinkButton>
+            </div>
+          )}
+        </Card>
 
-        {nextMeeting ? (
-          <Link href="/calendar" className="block h-full">
-            <div className="bg-white/50 rounded-xl border border-gold/30 p-6 hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
-              <p className="font-sans text-xs text-gold uppercase tracking-widest mb-4">
-                Next Club
-              </p>
-              <div className="flex items-start gap-4 flex-1">
-                <div className="flex-shrink-0 w-14 h-14 bg-gold/15 rounded-lg flex flex-col items-center justify-center">
-                  <span className="font-serif text-lg text-gold font-bold leading-none">
+        {/* Next meeting */}
+        <Card className="md:col-span-2" padded={false}>
+          {nextMeeting ? (
+            <Link href="/calendar" className="block p-5 sm:p-6 h-full group">
+              <SectionTitle>Next meeting</SectionTitle>
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-14 rounded-xl bg-gold/15 py-2 text-center">
+                  <p className="font-sans text-2xl font-semibold text-[#8a6a22] leading-none tabular-nums">
                     {new Date(nextMeeting.date + "T00:00:00").getDate()}
-                  </span>
-                  <span className="font-sans text-[10px] text-gold/70 uppercase">
-                    {new Date(nextMeeting.date + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-serif text-lg text-charcoal leading-tight">
-                    {nextMeeting.title}
-                  </h3>
-                  <p className="font-sans text-sm text-warm-brown/70 mt-1">
-                    {formatDate(nextMeeting.date)}
                   </p>
-                  <p className="font-sans text-sm text-warm-brown/70">
-                    {formatTime(nextMeeting.time)}
+                  <p className="font-sans text-[10px] uppercase tracking-wider text-[#8a6a22]/80 mt-1">
+                    {new Date(nextMeeting.date + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="font-serif text-lg text-charcoal leading-snug group-hover:text-mahogany transition-colors">
+                    {nextMeeting.title}
+                  </p>
+                  <p className="font-sans text-sm text-warm-brown mt-1">
+                    {formatDate(nextMeeting.date).split(",")[0]} · {formatTime(nextMeeting.time)}
                   </p>
                   {nextMeeting.location && (
-                    <p className="font-sans text-sm text-warm-brown/50 mt-0.5">
-                      {nextMeeting.location}
-                    </p>
+                    <p className="font-sans text-xs text-warm-brown/60 mt-0.5 truncate">{nextMeeting.location}</p>
                   )}
                 </div>
               </div>
-            </div>
-          </Link>
-        ) : (
-          <Link href="/calendar" className="block h-full">
-            <div className="bg-white/50 rounded-xl border border-cream-dark p-6 flex flex-col items-center justify-center h-full hover:shadow-lg transition-shadow cursor-pointer">
-              <p className="font-sans text-warm-brown/60 italic mb-3">
-                No upcoming meetings.
-              </p>
-              <span className="px-5 py-2 rounded-lg bg-gold/20 text-gold font-sans text-sm">
-                Schedule One
-              </span>
-            </div>
-          </Link>
-        )}
+            </Link>
+          ) : (
+            <Link href="/calendar" className="block p-5 sm:p-6 h-full group">
+              <SectionTitle>Next meeting</SectionTitle>
+              <p className="font-serif text-lg text-charcoal">Nothing scheduled.</p>
+              <p className="font-sans text-xs text-gold mt-3 group-hover:underline">Schedule one →</p>
+            </Link>
+          )}
+        </Card>
       </div>
 
-      <div className={`grid grid-cols-2 ${stats.totalPages ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4 mb-8`}>
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalBooks}</p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">Books Read</p>
-        </div>
-        {stats.totalPages !== null && stats.totalPages > 0 && (
-          <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-            <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalPages.toLocaleString()}</p>
-            <p className="font-sans text-xs text-warm-brown/60 mt-1">Total Pages Read</p>
-          </div>
-        )}
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-mahogany font-bold">{stats.totalMembers}</p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">Members</p>
-        </div>
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-5 text-center">
-          <p className="font-serif text-3xl text-gold font-bold">
-            {stats.avgRating !== null ? stats.avgRating.toFixed(1) : "—"}
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Stat label="Books finished" value={stats ? String(stats.totalBooks) : "—"} />
+        <Stat label="Pages read" value={stats?.totalPages ? stats.totalPages.toLocaleString() : "—"} />
+        <Stat label="Members" value={stats ? String(stats.totalMembers) : "—"} />
+        <Card className="flex flex-col items-center justify-center py-5">
+          {stats?.avgRating !== null && stats?.avgRating !== undefined ? (
+            <ScoreBadge score={stats.avgRating} size="lg" />
+          ) : (
+            <p className="font-sans text-3xl text-warm-brown/40 leading-none">—</p>
+          )}
+          <p className="font-sans text-[11px] uppercase tracking-wider text-warm-brown/70 mt-3">
+            Club average
           </p>
-          <p className="font-sans text-xs text-warm-brown/60 mt-1">Avg Rating</p>
-        </div>
+        </Card>
       </div>
-
     </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <Card className="flex flex-col items-center justify-center py-5">
+      <p className="font-serif text-4xl text-charcoal leading-none tabular-nums">{value}</p>
+      <p className="font-sans text-[11px] uppercase tracking-wider text-warm-brown/70 mt-3">{label}</p>
+    </Card>
   );
 }

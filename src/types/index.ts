@@ -35,6 +35,16 @@ export interface Rating {
   member?: Member;
 }
 
+export interface BookComment {
+  id: string;
+  book_id: string;
+  member_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  member?: Member;
+}
+
 export interface DiscussionTopic {
   id: string;
   book_id: string;

@@ -3,319 +3,146 @@
 @tailwind utilities;
 
 :root {
-  --background: #FDF6EC;
-  --foreground: #2B2B2B;
+  --background: #fbf5ea;
+  --foreground: #2b2622;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
+  /* A whisper of paper grain. Kept very faint so it reads as warmth, not noise. */
+  background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.018'/%3E%3C/svg%3E");
 }
 
-.font-script {
-  font-family: "Brush Script MT", "Apple Chancery", "Snell Roundhand", cursive;
+::selection {
+  background: rgba(196, 154, 59, 0.3);
 }
 
-/* Custom scrollbar for warm feel */
+/* Scrollbar — subtle, on-palette */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #F5E6CC;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #C49A3B;
+  background: rgba(105, 56, 26, 0.25);
   border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #69381A;
+  background: rgba(105, 56, 26, 0.45);
 }
 
-/* Book spine vertical text */
-.spine-text {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  transform: rotate(180deg);
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Spoiler blur */
 .spoiler-blur {
   filter: blur(8px);
   user-select: none;
-  transition: filter 0.4s ease;
+  transition: filter 0.35s ease;
 }
-
 .spoiler-blur.revealed {
   filter: blur(0);
   user-select: auto;
 }
 
-/* Rating slider custom styles */
+/* Rating slider */
 input[type="range"].rating-slider {
   -webkit-appearance: none;
   appearance: none;
   height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(to right, #C49A3B, #69381A);
+  border-radius: 999px;
+  background: linear-gradient(to right, #b5433e 0%, #c9862b 50%, #5f8a5b 80%, #c49a3b 100%);
   outline: none;
 }
-
 input[type="range"].rating-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: #3C1518;
-  border: 3px solid #C49A3B;
+  background: #fbf5ea;
+  border: 3px solid #3c1518;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(43, 38, 34, 0.25);
 }
-
 input[type="range"].rating-slider::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: #3C1518;
-  border: 3px solid #C49A3B;
+  background: #fbf5ea;
+  border: 3px solid #3c1518;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(43, 38, 34, 0.25);
 }
 
-/* ===== REALISTIC BOOKSHELF ===== */
-
-/* Wood grain SVG texture used via CSS */
-.wood-grain-texture {
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.02 0.15' numOctaves='6' seed='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.28 0 0 0 0 0.14 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
-}
-
-/* Shelf plank — thick, 3D, grainy */
-.wood-shelf {
+/* A thin ledge under a row of covers — the one nod to the bookshelf idea. */
+.shelf-ledge {
   position: relative;
-  height: 22px;
-  background:
-    radial-gradient(140% 180% at 15% 20%, rgba(255, 230, 178, 0.22) 0%, transparent 45%),
-    radial-gradient(130% 190% at 80% 120%, rgba(50, 24, 8, 0.28) 0%, transparent 60%),
-    linear-gradient(
-      92deg,
-      #9b7349 0%,
-      #7f5832 10%,
-      #936a43 18%,
-      #6c4828 30%,
-      #8c633e 41%,
-      #735030 50%,
-      #9a7249 61%,
-      #6f4d2d 74%,
-      #865f3c 86%,
-      #5d3f24 100%
-    );
-  box-shadow:
-    0 6px 12px -2px rgba(0, 0, 0, 0.4),
-    0 3px 4px -1px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 }
-
-/* Front lip of the shelf for 3D depth */
-.wood-shelf::after {
-  content: '';
+.shelf-ledge::after {
+  content: "";
   position: absolute;
-  bottom: -6px;
   left: 0;
   right: 0;
+  bottom: -10px;
   height: 6px;
-  background: linear-gradient(
-    180deg,
-    #6f4b2b 0%,
-    #5a3c22 45%,
-    #432c1a 100%
-  );
-  border-radius: 0 0 2px 2px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  background: linear-gradient(180deg, #a77c50 0%, #7a5535 100%);
+  box-shadow: 0 3px 6px rgba(43, 38, 34, 0.18);
 }
 
-/* Grain overlay on shelves */
-.wood-shelf::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='30'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.3' numOctaves='5' seed='8' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23w)'/%3E%3C/svg%3E");
-  border-radius: inherit;
-  pointer-events: none;
+/* A perfect 10 gets a slow, quiet glow. */
+@keyframes goldGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(196, 154, 59, 0.28), 0 4px 12px rgba(196, 154, 59, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(196, 154, 59, 0.45), 0 4px 18px rgba(196, 154, 59, 0.55);
+  }
+}
+.score-perfect {
+  animation: goldGlow 2.6s ease-in-out infinite;
 }
 
-/* Bookcase side panels — thick vertical wood */
-.bookcase-side {
-  width: 16px;
-  flex-shrink: 0;
-  position: relative;
-  background:
-    linear-gradient(
-      92deg,
-      #4c321c 0%,
-      #775131 17%,
-      #5f3f24 35%,
-      #866142 50%,
-      #634528 67%,
-      #7a5636 83%,
-      #50351f 100%
-    );
-  box-shadow:
-    inset 1px 0 0 rgba(255, 255, 255, 0.08),
-    inset -1px 0 0 rgba(0, 0, 0, 0.15),
-    2px 0 8px rgba(0, 0, 0, 0.15),
-    -2px 0 8px rgba(0, 0, 0, 0.15);
+/* Page enter */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-
-/* Vertical grain on side panels */
-.bookcase-side::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='300'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.4 0.02' numOctaves='5' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23s)'/%3E%3C/svg%3E");
-  pointer-events: none;
-}
-
-/* Top cap of the bookcase */
-.bookcase-top {
-  height: 14px;
-  background:
-    radial-gradient(120% 220% at 20% 0%, rgba(255, 232, 192, 0.2) 0%, transparent 55%),
-    linear-gradient(
-      95deg,
-      #8c6540 0%,
-      #a17b53 30%,
-      #88603b 62%,
-      #6f4d2e 100%
-    );
-  box-shadow:
-    0 -2px 6px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
-  position: relative;
-}
-
-.bookcase-top::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='15'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.3' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23t)'/%3E%3C/svg%3E");
-  pointer-events: none;
-}
-
-/* Shelf back wall — slightly darker to create depth */
-.shelf-back {
-  background:
-    linear-gradient(165deg, rgba(130, 82, 47, 0.28) 0%, rgba(87, 53, 31, 0.45) 45%, rgba(63, 40, 25, 0.62) 100%),
-    linear-gradient(180deg, #5f3a22 0%, #4a2d1a 100%);
-  position: relative;
-}
-
-/* Shadow at the top of each shelf bay for depth */
-.shelf-back::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 20px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.08) 0%, transparent 100%);
-  pointer-events: none;
-}
-
-/* Shadow at bottom of shelf bay (cast by shelf above) */
-.shelf-back::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 12px;
-  background: linear-gradient(0deg, rgba(0,0,0,0.05) 0%, transparent 100%);
-  pointer-events: none;
-}
-
-/* Gold shimmer animation */
-@keyframes goldShimmer {
-  0%, 100% { box-shadow: 0 0 10px rgba(196, 154, 59, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(196, 154, 59, 0.6); }
-}
-
-.gold-shimmer {
-  animation: goldShimmer 2s ease-in-out infinite;
-}
-
-/* Book pull-out animation */
-@keyframes pullOut {
-  0% { transform: translateZ(0) rotateY(0); }
-  100% { transform: translateZ(20px) rotateY(-5deg); }
-}
-
-.book-spine:hover {
-  animation: pullOut 0.3s ease forwards;
-}
-
-/* Smooth page transitions */
 .page-transition {
-  animation: fadeIn 0.3s ease-in-out;
+  animation: fadeUp 0.25s ease-out;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-
-@media (max-width: 430px) {
-  .bookcase-side {
-    width: 10px;
+/* Expandable rows */
+@keyframes expand {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
   }
-
-  .wood-shelf {
-    height: 16px;
-  }
-
-  .shelf-back {
-    min-height: 220px;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
-
-
-.bookcase-frame {
-  background:
-    linear-gradient(180deg, rgba(238, 201, 148, 0.08) 0%, rgba(238, 201, 148, 0) 10%),
-    linear-gradient(180deg, #6b4226 0%, #4c2f1a 100%);
-  border: 1px solid rgba(40, 20, 10, 0.4);
+.expand-in {
+  animation: expand 0.18s ease-out;
 }
-
-.shelf-spotlight {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 78px;
-  height: 10px;
-  border-radius: 999px;
-  background: radial-gradient(ellipse at center, rgba(255, 244, 209, 0.95) 0%, rgba(255, 235, 180, 0.6) 40%, rgba(255, 235, 180, 0) 100%);
-  filter: blur(0.4px);
-  pointer-events: none;
-  z-index: 1;
-}
-

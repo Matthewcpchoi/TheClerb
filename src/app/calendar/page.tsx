@@ -6,52 +6,39 @@ import { Meeting, Attendance, Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
 import MeetingCard from "@/components/MeetingCard";
 import BookCover from "@/components/BookCover";
+import { Button, Card, EmptyState, PageHeader, SectionTitle, inputClass, textareaClass } from "@/components/ui";
+
+const EMPTY_FORM = { title: "", date: "", time: "", location: "", notes: "", book_id: "" };
 
 export default function CalendarPage() {
   const { currentMember } = useMember();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [attendance, setAttendance] = useState<Record<string, Attendance[]>>(
-    {}
-  );
+  const [attendance, setAttendance] = useState<Record<string, Attendance[]>>({});
   const [books, setBooks] = useState<Book[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
-  const [form, setForm] = useState({
-    title: "",
-    date: "",
-    time: "",
-    location: "",
-    notes: "",
-    book_id: "",
-  });
+  const [editing, setEditing] = useState<Meeting | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const fetchMeetings = useCallback(async () => {
     const { data } = await supabase
       .from("meetings")
       .select("*, book:books(*)")
-      .order("date", { ascending: true });
+      .order("date", { ascending: true })
+      .order("time", { ascending: true });
     if (data) setMeetings(data);
   }, []);
 
   const fetchAttendance = useCallback(async () => {
-    const { data } = await supabase
-      .from("attendance")
-      .select("*, member:members(*)");
+    const { data } = await supabase.from("attendance").select("*, member:members(*)");
     if (data) {
       const grouped: Record<string, Attendance[]> = {};
-      data.forEach((a) => {
-        if (!grouped[a.meeting_id]) grouped[a.meeting_id] = [];
-        grouped[a.meeting_id].push(a);
-      });
+      for (const a of data) (grouped[a.meeting_id] ||= []).push(a);
       setAttendance(grouped);
     }
   }, []);
 
   const fetchBooks = useCallback(async () => {
-    const { data } = await supabase
-      .from("books")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data } = await supabase.from("books").select("*").order("created_at", { ascending: false });
     if (data) setBooks(data);
   }, []);
 
@@ -64,60 +51,54 @@ export default function CalendarPage() {
   useEffect(() => {
     const channel = supabase
       .channel("attendance-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "attendance" },
-        () => {
-          fetchAttendance();
-        }
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, () => fetchAttendance())
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
   }, [fetchAttendance]);
 
-  async function handleRsvp(
-    meetingId: string,
-    status: "going" | "maybe" | "not_going"
-  ) {
+  async function handleRsvp(meetingId: string, status: "going" | "maybe" | "not_going") {
     if (!currentMember) return;
-
-    await supabase.from("attendance").upsert(
-      {
-        meeting_id: meetingId,
-        member_id: currentMember.id,
-        status,
-      },
-      { onConflict: "meeting_id,member_id" }
-    );
-
+    // Optimistic: flip the button immediately, reconcile on the realtime event.
+    setAttendance((prev) => {
+      const list = (prev[meetingId] || []).filter((a) => a.member_id !== currentMember.id);
+      return {
+        ...prev,
+        [meetingId]: [
+          ...list,
+          { id: `tmp-${meetingId}`, meeting_id: meetingId, member_id: currentMember.id, status, member: currentMember },
+        ],
+      };
+    });
+    await supabase
+      .from("attendance")
+      .upsert({ meeting_id: meetingId, member_id: currentMember.id, status }, { onConflict: "meeting_id,member_id" });
     fetchAttendance();
   }
 
-  function openCreateForm() {
-    setEditingMeeting(null);
-    setForm({ title: "", date: "", time: "", location: "", notes: "", book_id: "" });
+  function openCreate() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
     setShowForm(true);
   }
 
-  function openEditForm(meeting: Meeting) {
-    setEditingMeeting(meeting);
+  function openEdit(m: Meeting) {
+    setEditing(m);
     setForm({
-      title: meeting.title,
-      date: meeting.date,
-      time: meeting.time,
-      location: meeting.location || "",
-      notes: meeting.notes || "",
-      book_id: meeting.book_id || "",
+      title: m.title,
+      date: m.date,
+      time: m.time,
+      location: m.location || "",
+      notes: m.notes || "",
+      book_id: m.book_id || "",
     });
     setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function handleSaveMeeting() {
+  async function handleSave() {
     if (!form.title || !form.date || !form.time) return;
-
     const payload = {
       title: form.title,
       date: form.date,
@@ -126,83 +107,71 @@ export default function CalendarPage() {
       notes: form.notes || null,
       book_id: form.book_id || null,
     };
-
-    if (editingMeeting) {
-      await supabase.from("meetings").update(payload).eq("id", editingMeeting.id);
-    } else {
-      await supabase.from("meetings").insert(payload);
-    }
-
-    setForm({ title: "", date: "", time: "", location: "", notes: "", book_id: "" });
+    if (editing) await supabase.from("meetings").update(payload).eq("id", editing.id);
+    else await supabase.from("meetings").insert(payload);
+    setForm(EMPTY_FORM);
     setShowForm(false);
-    setEditingMeeting(null);
+    setEditing(null);
     fetchMeetings();
   }
 
-  async function handleDeleteMeeting(meetingId: string) {
-    await supabase.from("attendance").delete().eq("meeting_id", meetingId);
-    await supabase.from("meetings").delete().eq("id", meetingId);
+  async function handleDelete(id: string) {
+    await supabase.from("meetings").delete().eq("id", id);
     fetchMeetings();
   }
 
-  const upcomingMeetings = meetings.filter(
-    (m) => new Date(m.date + "T" + m.time) >= new Date()
-  );
-  const pastMeetings = meetings.filter(
-    (m) => new Date(m.date + "T" + m.time) < new Date()
-  );
-
+  const now = new Date();
+  const upcoming = meetings.filter((m) => new Date(m.date + "T" + m.time) >= now);
+  const past = meetings.filter((m) => new Date(m.date + "T" + m.time) < now).reverse();
   const selectedBook = form.book_id ? books.find((b) => b.id === form.book_id) : null;
+  const groups = [
+    { label: "Reading now", items: books.filter((b) => b.status === "reading") },
+    { label: "Up next", items: books.filter((b) => b.status === "upcoming") },
+    { label: "Finished", items: books.filter((b) => b.status === "completed") },
+  ];
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="font-script text-[46px] text-mahogany tracking-wide">Calendar</h1>
-        </div>
-        {currentMember && (
-          <button
-            onClick={() => {
-              if (showForm) {
-                setShowForm(false);
-                setEditingMeeting(null);
-              } else {
-                openCreateForm();
-              }
-            }}
-            className="px-5 py-2.5 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
-          >
-            {showForm ? "Cancel" : "Schedule Meeting"}
-          </button>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="The Clerb"
+        title="Calendar"
+        subtitle={upcoming.length ? `${upcoming.length} upcoming` : "Nothing scheduled"}
+        action={
+          currentMember ? (
+            <Button
+              variant={showForm ? "secondary" : "primary"}
+              onClick={() => (showForm ? (setShowForm(false), setEditing(null)) : openCreate())}
+            >
+              {showForm ? "Cancel" : "Schedule"}
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {/* Create/Edit Meeting Form */}
       {showForm && (
-        <div className="bg-white/50 rounded-xl border border-cream-dark p-6 mb-8">
-          <h2 className="font-serif text-lg text-charcoal mb-4">
-            {editingMeeting ? "Edit Meeting" : "New Meeting"}
-          </h2>
-          <div className="space-y-4">
+        <Card className="mb-8">
+          <SectionTitle>{editing ? "Edit meeting" : "New meeting"}</SectionTitle>
+          <div className="space-y-3">
             <input
               type="text"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder="Meeting title"
-              className="w-full px-4 py-3 rounded-lg border border-cream-dark bg-white font-sans text-charcoal placeholder:text-warm-brown/50 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+              className={inputClass}
+              autoFocus
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <input
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="px-4 py-3 rounded-lg border border-cream-dark bg-white font-sans text-charcoal focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                className={inputClass}
               />
               <input
                 type="time"
                 value={form.time}
                 onChange={(e) => setForm({ ...form, time: e.target.value })}
-                className="px-4 py-3 rounded-lg border border-cream-dark bg-white font-sans text-charcoal focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                className={inputClass}
               />
             </div>
             <input
@@ -210,117 +179,94 @@ export default function CalendarPage() {
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
               placeholder="Location (optional)"
-              className="w-full px-4 py-3 rounded-lg border border-cream-dark bg-white font-sans text-charcoal placeholder:text-warm-brown/50 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+              className={inputClass}
             />
 
-            {/* Book Selection with cover preview */}
-            <div>
-              <label className="block font-sans text-xs text-warm-brown/60 uppercase tracking-wider mb-2">
-                Book for this meeting
-              </label>
-              <div className="flex items-start gap-4">
-                {selectedBook ? (
-                  <BookCover
-                    book={selectedBook}
-                    className="w-14 h-20 rounded shadow-md flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-14 h-20 bg-cream-dark rounded flex items-center justify-center flex-shrink-0">
-                    <svg className="w-6 h-6 text-warm-brown/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                  </div>
+            <div className="flex items-center gap-3">
+              {selectedBook ? (
+                <BookCover book={selectedBook} className="w-11 aspect-[2/3] rounded-md shadow flex-shrink-0" />
+              ) : (
+                <div className="w-11 aspect-[2/3] rounded-md bg-charcoal/[0.05] flex-shrink-0" />
+              )}
+              <select
+                value={form.book_id}
+                onChange={(e) => setForm({ ...form, book_id: e.target.value })}
+                className={inputClass}
+              >
+                <option value="">No book</option>
+                {groups.map(
+                  (g) =>
+                    g.items.length > 0 && (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.items.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.title}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )
                 )}
-                <select
-                  value={form.book_id}
-                  onChange={(e) => setForm({ ...form, book_id: e.target.value })}
-                  className="flex-1 px-4 py-3 rounded-lg border border-cream-dark bg-white font-sans text-charcoal focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold"
-                >
-                  <option value="">No book selected</option>
-                  {books.filter((b) => b.status === "reading").length > 0 && (
-                    <optgroup label="Currently Reading">
-                      {books.filter((b) => b.status === "reading").map((b) => (
-                        <option key={b.id} value={b.id}>{b.title}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {books.filter((b) => b.status === "upcoming").length > 0 && (
-                    <optgroup label="Upcoming">
-                      {books.filter((b) => b.status === "upcoming").map((b) => (
-                        <option key={b.id} value={b.id}>{b.title}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {books.filter((b) => b.status === "completed").length > 0 && (
-                    <optgroup label="Completed">
-                      {books.filter((b) => b.status === "completed").map((b) => (
-                        <option key={b.id} value={b.id}>{b.title}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </div>
+              </select>
             </div>
 
             <textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               placeholder="Notes (optional)"
-              className="w-full px-4 py-3 rounded-lg border border-cream-dark bg-white font-sans text-charcoal placeholder:text-warm-brown/50 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold resize-none"
+              className={textareaClass}
               rows={2}
             />
-            <button
-              onClick={handleSaveMeeting}
-              className="w-full py-3 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
-            >
-              {editingMeeting ? "Save Changes" : "Create Meeting"}
-            </button>
+            <Button className="w-full" size="lg" onClick={handleSave} disabled={!form.title || !form.date || !form.time}>
+              {editing ? "Save changes" : "Create meeting"}
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Upcoming Meetings */}
-      <div className="mb-10">
-        <h2 className="font-serif text-xl text-charcoal mb-4">Upcoming</h2>
-        {upcomingMeetings.length > 0 ? (
-          <div className="space-y-4">
-            {upcomingMeetings.map((meeting) => (
+      <section className="mb-10">
+        <SectionTitle>Upcoming</SectionTitle>
+        {upcoming.length > 0 ? (
+          <div className="space-y-3">
+            {upcoming.map((m) => (
               <MeetingCard
-                key={meeting.id}
-                meeting={meeting}
-                attendance={attendance[meeting.id] || []}
+                key={m.id}
+                meeting={m}
+                attendance={attendance[m.id] || []}
                 currentMemberId={currentMember?.id || null}
                 onRsvp={handleRsvp}
-                onEdit={openEditForm}
-                onDelete={handleDeleteMeeting}
+                onEdit={openEdit}
+                onDelete={handleDelete}
               />
             ))}
           </div>
         ) : (
-          <p className="font-sans text-sm text-warm-brown/60 italic py-8 text-center">
-            No upcoming meetings scheduled.
-          </p>
+          <Card>
+            <EmptyState
+              title="No meetings on the books"
+              body="Schedule the next one and everyone can RSVP with a tap."
+              action={currentMember ? <Button onClick={openCreate}>Schedule a meeting</Button> : undefined}
+            />
+          </Card>
         )}
-      </div>
+      </section>
 
-      {/* Past Meetings */}
-      {pastMeetings.length > 0 && (
-        <div>
-          <h2 className="font-serif text-xl text-charcoal mb-4">Past</h2>
-          <div className="space-y-4">
-            {pastMeetings.map((meeting) => (
+      {past.length > 0 && (
+        <section>
+          <SectionTitle>Past</SectionTitle>
+          <div className="space-y-3">
+            {past.map((m) => (
               <MeetingCard
-                key={meeting.id}
-                meeting={meeting}
-                attendance={attendance[meeting.id] || []}
+                key={m.id}
+                meeting={m}
+                attendance={attendance[m.id] || []}
                 currentMemberId={currentMember?.id || null}
                 onRsvp={handleRsvp}
-                onEdit={openEditForm}
-                onDelete={handleDeleteMeeting}
+                onEdit={openEdit}
+                onDelete={handleDelete}
               />
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

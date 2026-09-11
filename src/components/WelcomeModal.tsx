@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Member } from "@/types";
-import { getInitials, getAvatarColor } from "@/lib/utils";
+import { Avatar, Button, inputClass } from "./ui";
 
 interface WelcomeModalProps {
   onSelect: (member: Member) => void;
@@ -16,89 +16,63 @@ export default function WelcomeModal({ onSelect }: WelcomeModalProps) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchMembers();
-  }, []);
-
-  async function fetchMembers() {
-    const { data } = await supabase
+    supabase
       .from("members")
       .select("*")
-      .order("name");
-    if (data) setMembers(data);
-  }
+      .order("name")
+      .then(({ data }) => data && setMembers(data));
+  }, []);
 
   async function handleAddMember() {
     if (!newName.trim()) return;
     setError("");
-
     const { data, error: err } = await supabase
       .from("members")
       .insert({ name: newName.trim() })
       .select()
       .single();
-
     if (err) {
-      if (err.code === "23505") {
-        setError("That name is already taken.");
-      } else {
-        setError("Something went wrong. Try again.");
-      }
+      setError(err.code === "23505" ? "That name is already taken." : "Something went wrong. Try again.");
       return;
     }
-
-    if (data) {
-      onSelect(data);
-    }
+    if (data) onSelect(data);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-mahogany/60 backdrop-blur-sm">
-      <div className="bg-cream rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        <div className="bg-mahogany px-6 py-8 text-center">
-          <h1 className="font-serif text-3xl text-cream tracking-wide">
-            The Clerb
-          </h1>
-          <p className="text-cream/70 font-sans text-sm mt-2">
-            Welcome to the book club
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-charcoal/55 backdrop-blur-sm sm:p-4">
+      <div className="bg-cream w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden">
+        <div className="bg-mahogany px-6 pt-8 pb-7 text-center">
+          <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-gold-light/80 mb-2">
+            Welcome to
           </p>
+          <h1 className="font-serif text-4xl text-cream tracking-tight">The Clerb</h1>
         </div>
 
         <div className="p-6">
-          <h2 className="font-serif text-lg text-charcoal mb-4">
+          <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-warm-brown mb-3">
             Who are you?
-          </h2>
+          </p>
 
           {members.length > 0 && (
-            <div className="space-y-2 mb-6">
-              {members.map((member) => (
+            <div className="space-y-1.5 mb-5 max-h-[40vh] overflow-y-auto -mx-1 px-1">
+              {members.map((m) => (
                 <button
-                  key={member.id}
-                  onClick={() => onSelect(member)}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-cream-dark hover:border-gold hover:bg-gold/10 transition-all text-left"
+                  key={m.id}
+                  onClick={() => onSelect(m)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-charcoal/[0.08] bg-white/60 hover:border-gold hover:bg-gold/5 transition-all text-left"
                 >
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-cream font-semibold"
-                    style={{ backgroundColor: getAvatarColor(member.name) }}
-                  >
-                    {getInitials(member.name)}
-                  </div>
-                  <span className="font-sans text-charcoal">{member.name}</span>
+                  <Avatar name={m.name} size="md" />
+                  <span className="font-sans text-[15px] text-charcoal">{m.name}</span>
                 </button>
               ))}
             </div>
           )}
 
-          <div className="border-t border-cream-dark pt-4">
-            <p className="text-sm text-warm-brown font-sans mb-3">
-              New here? Add yourself:
-            </p>
+          <div className={members.length > 0 ? "border-t border-charcoal/[0.06] pt-4" : ""}>
             {!isAdding ? (
-              <button
-                onClick={() => setIsAdding(true)}
-                className="w-full py-3 rounded-lg border-2 border-dashed border-gold/40 text-gold hover:border-gold hover:bg-gold/5 transition-all font-sans text-sm"
-              >
-                Join The Clerb
-              </button>
+              <Button variant="secondary" className="w-full" onClick={() => setIsAdding(true)}>
+                I&apos;m new here
+              </Button>
             ) : (
               <div className="space-y-3">
                 <input
@@ -107,29 +81,25 @@ export default function WelcomeModal({ onSelect }: WelcomeModalProps) {
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddMember()}
                   placeholder="Your name"
-                  className="w-full px-4 py-3 rounded-lg border border-cream-dark bg-white font-sans text-charcoal placeholder:text-warm-brown/50 focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                  className={inputClass}
                   autoFocus
                 />
-                {error && (
-                  <p className="text-sm text-red-700 font-sans">{error}</p>
-                )}
+                {error && <p className="font-sans text-sm text-red-700">{error}</p>}
                 <div className="flex gap-2">
-                  <button
+                  <Button
+                    variant="secondary"
+                    className="flex-1"
                     onClick={() => {
                       setIsAdding(false);
                       setNewName("");
                       setError("");
                     }}
-                    className="flex-1 py-2 rounded-lg border border-cream-dark text-warm-brown font-sans text-sm hover:bg-cream-dark transition-colors"
                   >
                     Cancel
-                  </button>
-                  <button
-                    onClick={handleAddMember}
-                    className="flex-1 py-2 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
-                  >
+                  </Button>
+                  <Button className="flex-1" onClick={handleAddMember}>
                     Join
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

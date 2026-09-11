@@ -263,8 +263,8 @@ export default function CoverRepairPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="font-script text-[46px] text-mahogany tracking-wide mb-2">
-        Cover Repair
+      <h1 className="font-serif text-3xl sm:text-4xl text-charcoal tracking-tight mb-2">
+        Cover repair
       </h1>
       <p className="font-sans text-sm text-warm-brown mb-6">
         {rows.length} books · {missing} with no cover URL stored

@@ -6,7 +6,7 @@ import { Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
 import BookShelf from "@/components/BookShelf";
 import BookSearch from "@/components/BookSearch";
-import BookCover from "@/components/BookCover";
+import { Button, PageHeader } from "@/components/ui";
 import { markCompleted } from "@/lib/books";
 
 export default function ShelfPage() {
@@ -33,22 +33,18 @@ export default function ShelfPage() {
   }, [fetchBooks]);
 
   async function computeRatings(allBooks: Book[]) {
-    const completed = allBooks.filter((b) => b.status === "completed");
-    if (completed.length === 0) {
+    const rated = allBooks.filter((b) => b.status !== "upcoming");
+    if (rated.length === 0) {
       setBookRatings({});
       setHallOfFame(null);
       setHallOfShame(null);
       return;
     }
 
-    // One query for all books, not one per book.
     const { data: ratings } = await supabase
       .from("ratings")
       .select("book_id, pre_rating, post_rating")
-      .in(
-        "book_id",
-        completed.map((b) => b.id)
-      )
+      .in("book_id", rated.map((b) => b.id))
       .eq("is_visible", true);
 
     const valuesByBook = new Map<string, number[]>();
@@ -59,29 +55,24 @@ export default function ShelfPage() {
     }
 
     const ratingMap: Record<string, number> = {};
-    const bookRatingRows: { book: Book; avg: number }[] = [];
+    const completedRows: { book: Book; avg: number }[] = [];
 
-    for (const book of completed) {
+    for (const book of rated) {
       const vals = valuesByBook.get(book.id);
       if (!vals || vals.length === 0) continue;
       const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
       ratingMap[book.id] = avg;
-      bookRatingRows.push({ book, avg });
+      if (book.status === "completed") completedRows.push({ book, avg });
     }
 
     setBookRatings(ratingMap);
 
-    if (bookRatingRows.length > 0) {
-      bookRatingRows.sort((a, b) => b.avg - a.avg);
-      const best = bookRatingRows[0];
-      const worst = bookRatingRows[bookRatingRows.length - 1];
-
+    if (completedRows.length > 0) {
+      completedRows.sort((a, b) => b.avg - a.avg);
+      const best = completedRows[0];
+      const worst = completedRows[completedRows.length - 1];
       setHallOfFame({ ...best.book, avgRating: best.avg });
-      if (bookRatingRows.length > 1) {
-        setHallOfShame({ ...worst.book, avgRating: worst.avg });
-      } else {
-        setHallOfShame(null);
-      }
+      setHallOfShame(completedRows.length > 1 ? { ...worst.book, avgRating: worst.avg } : null);
     } else {
       setHallOfFame(null);
       setHallOfShame(null);
@@ -101,88 +92,44 @@ export default function ShelfPage() {
     });
   const upcomingBooks = books.filter((b) => b.status === "upcoming");
 
-  async function handleBookAdded(book: Book) {
+  function handleBookAdded(book: Book) {
     setBooks((prev) => [book, ...prev]);
     setShowSearch(false);
   }
 
-  async function handleStatusChange(bookId: string, status: Book["status"]) {
-    if (status === "reading") {
-      const currentlyReading = books.find((b) => b.status === "reading");
-      if (currentlyReading) {
-        await markCompleted(currentlyReading.id);
-      }
-    }
+  async function handleStartReading(bookId: string) {
+    const currentlyReading = books.find((b) => b.status === "reading");
+    if (currentlyReading) await markCompleted(currentlyReading.id);
+    await supabase.from("books").update({ status: "reading" }).eq("id", bookId);
+    fetchBooks();
+  }
 
-    if (status === "completed") {
-      await markCompleted(bookId);
-    } else {
-      await supabase.from("books").update({ status }).eq("id", bookId);
-    }
+  async function handleMarkFinished(bookId: string) {
+    await markCompleted(bookId);
     fetchBooks();
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="font-script text-[46px] text-mahogany tracking-wide">The Shelf</h1>
-        </div>
-        {currentMember && (
-          <button
-            onClick={() => setShowSearch(true)}
-            className="px-5 py-2.5 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors"
-          >
-            Add Book
-          </button>
-        )}
-      </div>
+    <div className="max-w-5xl mx-auto">
+      <PageHeader
+        eyebrow="The Clerb"
+        title="The Shelf"
+        subtitle={`${completedBooks.length} finished · ${upcomingBooks.length} up next`}
+        action={currentMember ? <Button onClick={() => setShowSearch(true)}>Add book</Button> : undefined}
+      />
 
       <BookShelf
         currentBook={currentBook}
+        upcomingBooks={upcomingBooks}
         completedBooks={completedBooks}
         hallOfFame={hallOfFame}
         hallOfShame={hallOfShame}
         bookRatings={bookRatings}
+        canEdit={Boolean(currentMember)}
+        onStartReading={handleStartReading}
+        onMarkFinished={handleMarkFinished}
+        onAddBook={() => setShowSearch(true)}
       />
-
-      {upcomingBooks.length > 0 && (
-        <div className="mt-10">
-          <h2 className="font-serif text-xl text-charcoal mb-4">Up Next</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {upcomingBooks.map((book) => (
-              <div
-                key={book.id}
-                className="bg-white/50 rounded-xl border border-cream-dark p-4 flex items-start gap-3"
-              >
-                <BookCover
-                  book={book}
-                  className="w-12 h-16 rounded shadow-sm flex-shrink-0"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="font-serif text-sm text-charcoal font-semibold truncate">
-                    {book.title}
-                  </p>
-                  {book.author && (
-                    <p className="font-sans text-xs text-warm-brown/60 truncate">
-                      {book.author}
-                    </p>
-                  )}
-                  {currentMember && (
-                    <button
-                      onClick={() => handleStatusChange(book.id, "reading")}
-                      className="mt-2 px-3 py-1 rounded text-xs font-sans bg-gold/20 text-gold hover:bg-gold/30 transition-colors"
-                    >
-                      Start Reading
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
 
       {showSearch && currentMember && (
         <BookSearch

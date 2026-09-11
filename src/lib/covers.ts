@@ -122,41 +122,40 @@ export function getBookCoverCandidates(book: CoverIdentifiers): string[] {
     .map(normalizeUrl)
     .filter((u): u is string => u !== null);
 
-  // A stored non-Google URL is one somebody chose deliberately — a cover
-  // picked by hand on /admin/covers. It outranks everything, including the
-  // proxy, because automatic resolution is exactly what it is correcting.
+  // Rendering is deliberately deterministic: it only ever uses URLs stored on
+  // the row. The proxy is NOT a render candidate — it re-resolves across
+  // providers on every request, and which provider wins depends on their
+  // latency that moment, so a book's cover would change between visits.
+  // Resolution happens once (at add time, or on /admin/covers) and the
+  // winner is stored; the shelf simply shows what was stored.
+
+  // A stored non-Google URL is a resolved or hand-picked cover. It wins.
   for (const url of stored) {
     if (!isGoogleBooks(url)) push(url);
   }
 
-  // The proxy next: it is the only place a provider's "image not available"
-  // placeholder can be detected. Google serves that placeholder with HTTP 200,
-  // so a browser <img> cannot distinguish it from real art and renders it
-  // happily; the proxy inspects the bytes and moves on instead.
-  push(proxy);
-
-  // Open Library by ISBN is safe to hand the browser directly: with
-  // default=false a miss is a real 404, so onError advances the cascade.
+  // Open Library by ISBN: with default=false a miss is a genuine 404, so
+  // onError advances correctly.
   if (book.isbn) {
     push(openLibraryCoverUrl(book.isbn, "L"));
     push(openLibraryCoverUrl(book.isbn, "M"));
   }
 
+  // Google art last — the only source that can answer with a placeholder.
   for (const url of stored) {
-    if (isGoogleBooks(url) && !proxy) {
-      // Raw Google URLs only when the proxy cannot run at all. They are
-      // otherwise omitted deliberately: an unvalidated Google URL is exactly
-      // what puts the grey placeholder on the shelf, and the proxy already
-      // tries Google properly, with validation.
+    if (isGoogleBooks(url)) {
       for (const zoom of GOOGLE_ZOOM_ORDER) push(googleCoverUrl(url, zoom));
     }
   }
-
-  if (book.google_books_id && !proxy) {
+  if (book.google_books_id) {
     for (const zoom of GOOGLE_ZOOM_ORDER) {
       push(googleCoverUrlFromId(book.google_books_id, zoom));
     }
   }
+
+  // Unused here by design; retained so proxyCoverUrl stays the single place
+  // the resolve/picker URL is built.
+  void proxy;
 
   return out;
 }

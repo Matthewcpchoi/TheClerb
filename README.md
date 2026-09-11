@@ -43,12 +43,25 @@ CREATE TABLE books (
   author text,
   cover_url text,
   thumbnail_url text,
+  isbn text,
   spine_color text,
   google_books_id text,
-  total_pages integer,
+  page_count integer,
+  completed_at timestamptz,
   status text CHECK (status IN ('reading', 'completed', 'upcoming')) DEFAULT 'upcoming',
   added_by uuid REFERENCES members(id),
   created_at timestamptz DEFAULT now()
+);
+
+-- One short "take" per member per book, shown beside their rating
+CREATE TABLE book_comments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  book_id uuid REFERENCES books(id) ON DELETE CASCADE,
+  member_id uuid REFERENCES members(id) ON DELETE CASCADE,
+  content text NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(book_id, member_id)
 );
 
 -- Individual ratings per member per book
@@ -103,7 +116,9 @@ ALTER TABLE ratings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discussion_topics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meetings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE book_comments ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "Allow all on book_comments" ON book_comments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on members" ON members FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on books" ON books FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on ratings" ON ratings FOR ALL USING (true) WITH CHECK (true);

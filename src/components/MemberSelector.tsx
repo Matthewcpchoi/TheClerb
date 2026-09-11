@@ -3,111 +3,87 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Member } from "@/types";
-import { getInitials, getAvatarColor } from "@/lib/utils";
+import { Avatar } from "./ui";
+import { cn } from "@/lib/utils";
 
 interface MemberSelectorProps {
   currentMember: Member | null;
   onSelect: (member: Member) => void;
 }
 
-export default function MemberSelector({
-  currentMember,
-  onSelect,
-}: MemberSelectorProps) {
+export default function MemberSelector({ currentMember, onSelect }: MemberSelectorProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchMembers();
-  }, []);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  async function fetchMembers() {
-    const { data } = await supabase
+    supabase
       .from("members")
       .select("*")
-      .order("name");
-    if (data) setMembers(data);
-  }
+      .order("name")
+      .then(({ data }) => data && setMembers(data));
+  }, []);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={ref}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cream-dark transition-colors"
+        className="flex items-center gap-2 h-10 pl-1.5 pr-2.5 rounded-full hover:bg-charcoal/[0.05] transition-colors"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
       >
         {currentMember ? (
           <>
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-cream text-xs font-semibold"
-              style={{ backgroundColor: getAvatarColor(currentMember.name) }}
-            >
-              {getInitials(currentMember.name)}
-            </div>
-            <span className="text-sm font-sans text-charcoal hidden sm:inline">
-              {currentMember.name}
-            </span>
+            <Avatar name={currentMember.name} size="sm" />
+            <span className="font-sans text-sm text-charcoal hidden sm:inline">{currentMember.name.split(" ")[0]}</span>
           </>
         ) : (
-          <span className="text-sm font-sans text-espresso">Who are you?</span>
+          <span className="font-sans text-sm text-mahogany px-1.5">Who are you?</span>
         )}
         <svg
-          className={`w-4 h-4 text-espresso transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={cn("w-3.5 h-3.5 text-warm-brown/60 transition-transform", isOpen && "rotate-180")}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-cream border border-cream-dark rounded-lg shadow-lg z-50 overflow-hidden">
-          <div className="p-2">
-            <p className="text-xs text-warm-brown font-sans uppercase tracking-wider px-2 py-1">
-              Select Member
-            </p>
-            {members.map((member) => (
-              <button
-                key={member.id}
-                onClick={() => {
-                  onSelect(member);
-                  setIsOpen(false);
-                }}
-                className={`w-full flex items-center gap-2 px-2 py-2 rounded-md text-left transition-colors ${
-                  currentMember?.id === member.id
-                    ? "bg-gold/20 text-mahogany"
-                    : "hover:bg-cream-dark text-charcoal"
-                }`}
-              >
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-cream text-xs font-semibold flex-shrink-0"
-                  style={{ backgroundColor: getAvatarColor(member.name) }}
+        <div className="absolute right-0 top-full mt-2 w-60 bg-cream border border-charcoal/[0.08] rounded-2xl shadow-[0_12px_40px_-12px_rgba(43,38,34,0.35)] z-50 p-1.5 expand-in">
+          <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-brown/70 px-2.5 pt-2 pb-1.5">
+            Switch member
+          </p>
+          <ul role="listbox">
+            {members.map((m) => (
+              <li key={m.id}>
+                <button
+                  role="option"
+                  aria-selected={currentMember?.id === m.id}
+                  onClick={() => {
+                    onSelect(m);
+                    setIsOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left transition-colors",
+                    currentMember?.id === m.id ? "bg-gold/15 text-charcoal" : "hover:bg-charcoal/[0.05] text-charcoal"
+                  )}
                 >
-                  {getInitials(member.name)}
-                </div>
-                <span className="text-sm font-sans">{member.name}</span>
-              </button>
+                  <Avatar name={m.name} size="sm" />
+                  <span className="font-sans text-sm">{m.name}</span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
     </div>

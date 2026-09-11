@@ -1,87 +1,75 @@
 "use client";
 
 import { Attendance } from "@/types";
-import { getInitials, getAvatarColor, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { Avatar } from "./ui";
 
 interface AttendanceTrackerProps {
   attendance: Attendance[];
   currentMemberId: string | null;
   onRsvp: (status: "going" | "maybe" | "not_going") => void;
+  /** Past meetings: show who came, hide the buttons. */
+  compact?: boolean;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  going: "Going",
-  maybe: "Maybe",
-  not_going: "Can't Make It",
-};
+const OPTIONS = [
+  { status: "going", label: "Going", active: "bg-sage text-cream border-sage" },
+  { status: "maybe", label: "Maybe", active: "bg-gold text-cream border-gold" },
+  { status: "not_going", label: "Can't", active: "bg-warm-brown text-cream border-warm-brown" },
+] as const;
 
 export default function AttendanceTracker({
   attendance,
   currentMemberId,
   onRsvp,
+  compact = false,
 }: AttendanceTrackerProps) {
-  const myRsvp = attendance.find((a) => a.member_id === currentMemberId);
-  const goingList = attendance.filter((a) => a.status === "going");
-  const maybeList = attendance.filter((a) => a.status === "maybe");
-  const notGoingList = attendance.filter((a) => a.status === "not_going");
+  const mine = attendance.find((a) => a.member_id === currentMemberId);
+  const going = attendance.filter((a) => a.status === "going");
+  const maybe = attendance.filter((a) => a.status === "maybe");
 
   return (
-    <div className="space-y-3">
-      {/* RSVP buttons */}
-      {currentMemberId && (
-        <div className="flex gap-2">
-          {(["going", "maybe", "not_going"] as const).map((status) => (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+      {currentMemberId && !compact && (
+        <div className="inline-flex rounded-xl border border-charcoal/10 bg-white/60 p-0.5">
+          {OPTIONS.map((o) => (
             <button
-              key={status}
-              onClick={() => onRsvp(status)}
+              key={o.status}
+              onClick={() => onRsvp(o.status)}
               className={cn(
-                "flex-1 py-2 rounded-lg font-sans text-xs transition-colors",
-                myRsvp?.status === status
-                  ? status === "going"
-                    ? "bg-sage text-cream"
-                    : status === "maybe"
-                      ? "bg-gold text-cream"
-                      : "bg-warm-brown text-cream"
-                  : "border border-cream-dark text-warm-brown hover:bg-cream-dark"
+                "h-8 px-3.5 rounded-[10px] font-sans text-xs font-medium transition-all border border-transparent",
+                mine?.status === o.status ? o.active : "text-warm-brown hover:bg-charcoal/5"
               )}
             >
-              {STATUS_LABELS[status]}
+              {o.label}
             </button>
           ))}
         </div>
       )}
 
-      {/* Attendance summary */}
-      <div className="flex gap-4">
-        {[
-          { list: goingList, label: "Going", color: "text-sage" },
-          { list: maybeList, label: "Maybe", color: "text-gold" },
-          { list: notGoingList, label: "Can't", color: "text-warm-brown/50" },
-        ].map(({ list, label, color }) =>
-          list.length > 0 ? (
-            <div key={label} className="flex items-center gap-1.5">
-              <span className={`font-sans text-xs ${color}`}>{label}:</span>
-              <div className="flex -space-x-1.5">
-                {list.map((a) => (
-                  <div
-                    key={a.id}
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-cream border-2 border-cream flex-shrink-0"
-                    style={{
-                      backgroundColor: getAvatarColor(
-                        a.member?.name || "?"
-                      ),
-                      fontSize: "8px",
-                    }}
-                    title={a.member?.name || "Member"}
-                  >
-                    {getInitials(a.member?.name || "?")}
-                  </div>
+      {(going.length > 0 || maybe.length > 0) && (
+        <div className="flex items-center gap-4">
+          {going.length > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="flex -space-x-2">
+                {going.map((a) => (
+                  <Avatar key={a.id} name={a.member?.name || "?"} size="sm" className="ring-2 ring-cream" />
                 ))}
               </div>
+              <span className="font-sans text-xs text-sage font-medium">
+                {going.length} going
+              </span>
             </div>
-          ) : null
-        )}
-      </div>
+          )}
+          {maybe.length > 0 && (
+            <span className="font-sans text-xs text-warm-brown/70">{maybe.length} maybe</span>
+          )}
+        </div>
+      )}
+
+      {attendance.length === 0 && compact && (
+        <span className="font-sans text-xs text-warm-brown/50">No RSVPs recorded</span>
+      )}
     </div>
   );
 }
