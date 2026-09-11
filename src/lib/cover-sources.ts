@@ -11,7 +11,7 @@
  * Providers are ordered by observed reliability for book cover art.
  */
 
-const FETCH_TIMEOUT_MS = 4000;
+const FETCH_TIMEOUT_MS = 2500;
 
 export interface CoverQuery {
   googleBooksId?: string | null;
@@ -128,15 +128,12 @@ async function appleBooksSearch(query: CoverQuery): Promise<string[]> {
  * Ordered cover URL candidates, best source first. Direct identifier lookups
  * come before searches, since a search can match the wrong edition.
  */
-export async function resolveCoverCandidates(
-  query: CoverQuery
-): Promise<string[]> {
+export function directCoverCandidates(query: CoverQuery): string[] {
   const candidates: string[] = [];
   const push = (u: string) => {
     if (u && !candidates.includes(u)) candidates.push(u);
   };
 
-  // 1. Exact identifier lookups.
   if (query.isbn) {
     push(openLibraryByIsbn(query.isbn, "L"));
     push(openLibraryByIsbn(query.isbn, "M"));
@@ -146,8 +143,21 @@ export async function resolveCoverCandidates(
     push(googleContentUrl(query.googleBooksId, 1));
   }
 
-  // 2. Searches, run together — these are the paths that rescue books the
-  //    identifier lookups cannot resolve.
+  return candidates;
+}
+
+/**
+ * Search-derived candidates. Only worth paying for when the direct lookups
+ * above have already failed — each one costs an extra API round trip.
+ */
+export async function searchCoverCandidates(
+  query: CoverQuery
+): Promise<string[]> {
+  const candidates: string[] = [];
+  const push = (u: string) => {
+    if (u && !candidates.includes(u)) candidates.push(u);
+  };
+
   const [openLibrary, google, apple] = await Promise.all([
     openLibrarySearch(query),
     googleBooksSearch(query),
