@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Book, Meeting } from "@/types";
-import { formatDate, formatTime, getBookCoverCandidates, getExactPageCount } from "@/lib/utils";
+import { formatDate, formatTime, getExactPageCount } from "@/lib/utils";
 import { fetchVolumeById, getISBN } from "@/lib/google-books";
 import { fetchOpenLibraryByISBN } from "@/lib/open-library";
+import BookCover from "@/components/BookCover";
 import Link from "next/link";
 
 export default function Home() {
@@ -22,19 +23,14 @@ export default function Home() {
     fetchData();
   }, []);
 
-  const [currentBookCoverIndex, setCurrentBookCoverIndex] = useState(0);
-
-  useEffect(() => {
-    setCurrentBookCoverIndex(0);
-  }, [currentBook?.id]);
-
   async function fetchData() {
+    // maybeSingle: an empty shelf is normal and must not surface as an error.
     const { data: reading } = await supabase
       .from("books")
       .select("*")
       .eq("status", "reading")
       .limit(1)
-      .single();
+      .maybeSingle();
     if (reading) setCurrentBook(reading);
 
     const now = new Date().toISOString().split("T")[0];
@@ -47,9 +43,11 @@ export default function Home() {
       .limit(1);
     if (meetings && meetings.length > 0) setNextMeeting(meetings[0]);
 
+    // select("*") rather than naming columns: an older table may not have
+    // page_count yet, and naming a missing column fails the entire query.
     const { data: completedBooks } = await supabase
       .from("books")
-      .select("id,page_count,total_pages,google_books_id")
+      .select("*")
       .eq("status", "completed");
 
     // Backfill page counts from Google Books + Open Library for books missing them
@@ -69,7 +67,6 @@ export default function Home() {
               const olData = await fetchOpenLibraryByISBN(isbn);
               if (olData?.number_of_pages && olData.number_of_pages > 0) {
                 pc = olData.number_of_pages;
-                console.log(`[Open Library] Backfilled page count for "${vol.volumeInfo.title}": ${pc}`);
               }
             }
           }
@@ -82,16 +79,7 @@ export default function Home() {
       })
     );
 
-    // Log books still missing page counts
     const allCompleted = completedBooks || [];
-    const missingPages = allCompleted.filter((b) => getExactPageCount(b) === null);
-    if (missingPages.length > 0) {
-      console.log(
-        `[Pages] ${missingPages.length} book(s) missing page count:`,
-        missingPages.map((b) => b.id)
-      );
-    }
-
     const pageValues = allCompleted
       .map((b) => getExactPageCount(b))
       .filter((v): v is number => typeof v === "number");
@@ -132,8 +120,6 @@ export default function Home() {
     });
   }
 
-  const currentBookCoverSources = currentBook ? getBookCoverCandidates(currentBook) : [];
-
   return (
     <div className="max-w-3xl mx-auto">
       <div className="text-center pt-4 pb-6">
@@ -150,23 +136,11 @@ export default function Home() {
                 Currently Reading
               </p>
               <div className="flex items-start gap-4 flex-1">
-                {currentBookCoverSources[currentBookCoverIndex] ? (
-                  <img
-                    src={currentBookCoverSources[currentBookCoverIndex]}
-                    alt=""
-                    className="w-20 h-28 object-cover rounded-lg shadow-lg flex-shrink-0"
-                    style={{ color: "transparent" }}
-                    referrerPolicy="no-referrer"
-                    onError={() => setCurrentBookCoverIndex((prev) => prev + 1)}
-                  />
-                ) : (
-                  <div
-                    className="w-20 h-28 rounded-lg shadow-lg flex-shrink-0 flex items-center justify-center p-2"
-                    style={{ backgroundColor: currentBook.spine_color || "#3C1518" }}
-                  >
-                    <p className="font-serif text-cream text-xs text-center leading-tight">{currentBook.title}</p>
-                  </div>
-                )}
+                <BookCover
+                  book={currentBook}
+                  className="w-20 h-28 rounded-lg shadow-lg flex-shrink-0"
+                  eager
+                />
                 <div className="min-w-0">
                   <h2 className="font-serif text-xl text-charcoal mb-1 leading-tight">
                     {currentBook.title}

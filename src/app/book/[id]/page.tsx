@@ -11,7 +11,8 @@ import DiscussionTopics from "@/components/DiscussionTopics";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchVolumeById } from "@/lib/google-books";
-import { getBookCoverCandidates } from "@/lib/utils";
+import BookCover from "@/components/BookCover";
+import { markCompleted } from "@/lib/books";
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -30,8 +31,6 @@ export default function BookDetailPage() {
   const [pendingPostValue, setPendingPostValue] = useState<number | null>(null);
   const [description, setDescription] = useState("");
   const [pageCount, setPageCount] = useState<number | null>(null);
-  const [coverSources, setCoverSources] = useState<string[]>([]);
-  const [coverIndex, setCoverIndex] = useState(0);
 
   const fetchBook = useCallback(async () => {
     const { data } = await supabase
@@ -42,8 +41,6 @@ export default function BookDetailPage() {
     if (data) {
       setBook(data);
       if (typeof data.page_count === "number") setPageCount(data.page_count);
-      setCoverSources(getBookCoverCandidates(data));
-      setCoverIndex(0);
       if (data.google_books_id) {
         try {
           const json = await fetchVolumeById(data.google_books_id);
@@ -130,7 +127,8 @@ export default function BookDetailPage() {
           book_id: bookId,
           member_id: currentMember.id,
           pre_rating: value,
-          is_visible: false,
+          // Preserve an existing reveal; only a brand-new rating starts hidden.
+          is_visible: myRating?.is_visible ?? false,
         },
         { onConflict: "book_id,member_id" }
       )
@@ -150,7 +148,9 @@ export default function BookDetailPage() {
     const preVal = myRating.pre_rating ?? 5;
     const changed = Math.abs(value - preVal) > 0.001;
 
-    if (changed && !pendingPostValue) {
+    // Explicit null check: 0 is a valid rating and would be swallowed by a
+    // truthiness test, making a score of 0 impossible to save.
+    if (changed && pendingPostValue === null) {
       // Score changed from pre — ask for reason before saving
       setPendingPostValue(value);
       return;
@@ -232,15 +232,11 @@ export default function BookDetailPage() {
       {/* Book Header */}
       <div className="flex flex-col md:flex-row items-start gap-8 mb-10">
         <div className="flex-shrink-0 relative">
-          {coverSources[coverIndex] && (
-            <img
-              src={coverSources[coverIndex]}
-              alt={book.title}
-              className="w-48 h-72 object-cover rounded-lg shadow-xl"
-              referrerPolicy="no-referrer"
-              onError={() => setCoverIndex((prev) => prev + 1)}
-            />
-          )}
+          <BookCover
+            book={book}
+            className="w-48 h-72 rounded-lg shadow-xl"
+            eager
+          />
           {/* Club Score Badge */}
           {(() => {
             const visibleRatings = ratings.filter((r) => r.is_visible);
@@ -279,20 +275,28 @@ export default function BookDetailPage() {
                 onChange={async (e) => {
                   const nextStatus = e.target.value as Book["status"];
                   if (nextStatus === "reading") {
-                    await supabase
+                    const { data: others } = await supabase
                       .from("books")
-                      .update({ status: "completed" })
+                      .select("id")
                       .eq("status", "reading")
                       .neq("id", bookId);
+                    for (const other of others || []) {
+                      await markCompleted(other.id);
+                    }
                   }
-                  await supabase
-                    .from("books")
-                    .update({ status: nextStatus })
-                    .eq("id", bookId);
+                  if (nextStatus === "completed") {
+                    await markCompleted(bookId);
+                  } else {
+                    await supabase
+                      .from("books")
+                      .update({ status: nextStatus })
+                      .eq("id", bookId);
+                  }
                   fetchBook();
                 }}
                 className="px-3 py-1 rounded text-xs font-sans border border-cream-dark bg-white text-charcoal focus:outline-none"
               >
+                <option value="upcoming">Upcoming</option>
                 <option value="reading">Currently Reading</option>
                 <option value="completed">Completed</option>
               </select>
@@ -422,7 +426,7 @@ export default function BookDetailPage() {
               </button>
             ) : (
               <div className="mb-6 p-4 rounded-lg bg-cream-dark/30 space-y-4">
-                {!pendingPostValue ? (
+                {pendingPostValue === null ? (
                   <RatingSlider
                     label="Your Post-Club Rating"
                     initialValue={myRating!.pre_rating ?? 5}
@@ -508,7 +512,7 @@ export default function BookDetailPage() {
         {/* Editing post-rating */}
         {currentMember && editingPost && (
           <div className="mb-6 p-4 rounded-lg bg-cream-dark/30 space-y-4">
-            {!pendingPostValue ? (
+            {pendingPostValue === null ? (
               <RatingSlider
                 label="Edit Post-Club Rating"
                 initialValue={myRating?.post_rating ?? myRating?.pre_rating ?? 5}

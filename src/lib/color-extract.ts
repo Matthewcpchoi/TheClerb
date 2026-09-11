@@ -16,51 +16,22 @@ const WARM_PALETTE = [
   "#744210", // Dark Gold
 ];
 
-export function extractDominantColor(imageUrl: string): Promise<string> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") {
-      resolve(getRandomWarmColor());
-      return;
-    }
-
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-
-    img.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(getRandomWarmColor());
-          return;
-        }
-
-        canvas.width = 1;
-        canvas.height = 1;
-        ctx.drawImage(img, 0, 0, 1, 1);
-        const pixel = ctx.getImageData(0, 0, 1, 1).data;
-
-        // Darken the color for spine readability
-        const r = Math.max(0, pixel[0] - 40);
-        const g = Math.max(0, pixel[1] - 40);
-        const b = Math.max(0, pixel[2] - 40);
-
-        resolve(`rgb(${r}, ${g}, ${b})`);
-      } catch {
-        resolve(getRandomWarmColor());
-      }
-    };
-
-    img.onerror = () => {
-      resolve(getRandomWarmColor());
-    };
-
-    img.src = imageUrl;
-  });
-}
-
-export function getRandomWarmColor(): string {
-  return WARM_PALETTE[Math.floor(Math.random() * WARM_PALETTE.length)];
+/**
+ * Canvas extraction of a cover's dominant colour is not possible here:
+ * books.google.com sends no Access-Control-Allow-Origin header, so a
+ * crossOrigin="anonymous" load always fails, and without it the canvas is
+ * tainted and getImageData throws. The previous implementation therefore
+ * fell through to a random colour on every single call.
+ *
+ * A stable hash of the title gives each book one consistent colour instead,
+ * with no network request to hang on.
+ */
+export function getDeterministicSpineColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return WARM_PALETTE[Math.abs(hash) % WARM_PALETTE.length];
 }
 
 export function getContrastColor(bgColor: string): string {

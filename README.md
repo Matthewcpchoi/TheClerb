@@ -154,3 +154,4 @@ The app uses a "Warm Bookstore" design language:
 - [Architecture Overview](./ARCHITECTURE.md)
 - [Database Notes](./DATABASE.md)
 - [Project Memory](./docs/PROJECT_MEMORY.md)
+- [Audit & Fixes](./docs/AUDIT_AND_FIXES.md) — known issues and remediation plan

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Meeting, Attendance } from "@/types";
-import { formatDate, formatTime, getBookCoverCandidates } from "@/lib/utils";
+import { formatDate, formatTime } from "@/lib/utils";
 import AttendanceTracker from "./AttendanceTracker";
+import BookCover from "./BookCover";
 import Link from "next/link";
 
 interface MeetingCardProps {
@@ -25,14 +26,6 @@ export default function MeetingCard({
 }: MeetingCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const isPast = new Date(meeting.date + "T" + meeting.time) < new Date();
-  const bookCoverSources = useMemo(() => (meeting.book ? getBookCoverCandidates(meeting.book) : []), [meeting.book]);
-  const [coverIndex, setCoverIndex] = useState(0);
-
-  useEffect(() => {
-    setCoverIndex(0);
-  }, [meeting.book?.id]);
-
-  const hasBookCover = bookCoverSources[coverIndex];
 
   return (
     <div
@@ -41,18 +34,12 @@ export default function MeetingCard({
       }`}
     >
       <div className="flex">
-        {hasBookCover && (
+        {meeting.book && (
           <Link
-            href={`/book/${meeting.book!.id}`}
+            href={`/book/${meeting.book.id}`}
             className="w-24 min-h-[170px] flex-shrink-0 bg-cream-dark/30 flex items-center justify-center p-2"
           >
-            <img
-              src={bookCoverSources[coverIndex]}
-              alt={meeting.book!.title}
-              className="w-full h-full object-contain"
-              referrerPolicy="no-referrer"
-              onError={() => setCoverIndex((prev) => prev + 1)}
-            />
+            <BookCover book={meeting.book} className="w-full h-full rounded" />
           </Link>
         )}
 
@@ -92,15 +79,6 @@ export default function MeetingCard({
               )}
             </div>
           </div>
-
-          {meeting.book && !hasBookCover && (
-            <Link
-              href={`/book/${meeting.book.id}`}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-mahogany/5 hover:bg-mahogany/10 transition-colors mb-3"
-            >
-              <span className="font-sans text-xs text-mahogany">{meeting.book.title}</span>
-            </Link>
-          )}
 
           {meeting.location && <p className="font-sans text-sm text-warm-brown/70 mb-2">Location: {meeting.location}</p>}
 
