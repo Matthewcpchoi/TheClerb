@@ -2,117 +2,113 @@
 
 import { useState, useEffect } from "react";
 import { DiscussionTopic } from "@/types";
-import { Avatar, Button, textareaClass } from "./ui";
+import { Kicker, OutlineButton, SolidButton } from "./ui";
+import { cn } from "@/lib/utils";
 
-interface DiscussionTopicsProps {
-  topics: DiscussionTopic[];
-  bookId: string;
-  memberId: string | null;
-  onAddTopic: (content: string) => void;
-}
-
+/** Questions for the meeting. Blurred until someone chooses to read them. */
 export default function DiscussionTopics({
   topics,
   bookId,
   memberId,
   onAddTopic,
-}: DiscussionTopicsProps) {
-  const [revealed, setRevealed] = useState(false);
-  const [newTopic, setNewTopic] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
+}: {
+  topics: DiscussionTopic[];
+  bookId: string;
+  memberId: string | null;
+  onAddTopic: (content: string) => void;
+}) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [draft, setDraft] = useState("");
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    setRevealed(localStorage.getItem(`topics-revealed-${bookId}`) === "true");
+    setOpen(new Set());
   }, [bookId]);
 
-  function handleReveal() {
-    const next = !revealed;
-    setRevealed(next);
-    localStorage.setItem(`topics-revealed-${bookId}`, next ? "true" : "false");
-  }
-
-  function handleSubmit() {
-    if (!newTopic.trim()) return;
-    onAddTopic(newTopic.trim());
-    setNewTopic("");
-    setIsAdding(false);
+  function toggle(id: string) {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   return (
-    <div className="space-y-4">
-      {topics.length > 0 && (
-        <div className="flex items-center justify-between">
-          <p className="font-sans text-xs text-warm-brown/70">
-            Blurred until you&apos;re ready — spoilers live here.
+    <div>
+      <div className="flex items-baseline justify-between">
+        <Kicker>Discussion</Kicker>
+        {topics.length > 0 && (
+          <span className="text-[10.5px] text-muted">tap to unblur</span>
+        )}
+      </div>
+
+      {topics.length === 0 && !adding && (
+        <p className="py-4 text-[12.5px] text-muted">Nothing queued for the meeting yet.</p>
+      )}
+
+      {topics.map((t, i) => (
+        <button
+          key={t.id}
+          onClick={() => toggle(t.id)}
+          className={cn(
+            "w-full py-[13px] text-left",
+            i < topics.length - 1 && "row-line"
+          )}
+        >
+          <span className="text-[11px] text-muted">{t.member?.name || "Anonymous"}</span>
+          <p
+            className={cn(
+              "mt-[5px] text-[13.5px] leading-[1.5] text-ink",
+              open.has(t.id) ? "score-reveal" : "score-blur"
+            )}
+            style={{ filter: open.has(t.id) ? "blur(0)" : "blur(4.5px)" }}
+          >
+            {t.content}
           </p>
-          <Button size="sm" variant="secondary" onClick={handleReveal}>
-            {revealed ? "Hide" : `Reveal ${topics.length}`}
-          </Button>
+        </button>
+      ))}
+
+      {memberId && (
+        <div className="mt-4">
+          {!adding ? (
+            <OutlineButton onClick={() => setAdding(true)}>Add a question</OutlineButton>
+          ) : (
+            <div className="space-y-2">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={3}
+                autoFocus
+                placeholder="What do you want to talk about?"
+                className="w-full resize-none rounded-lg border border-tan bg-transparent px-3 py-2 text-[13.5px] leading-relaxed text-ink outline-none placeholder:text-muted/60 focus:border-green"
+              />
+              <div className="flex gap-2">
+                <OutlineButton
+                  className="flex-1"
+                  onClick={() => {
+                    setAdding(false);
+                    setDraft("");
+                  }}
+                >
+                  Cancel
+                </OutlineButton>
+                <SolidButton
+                  className="flex-1"
+                  onClick={() => {
+                    if (!draft.trim()) return;
+                    onAddTopic(draft.trim());
+                    setDraft("");
+                    setAdding(false);
+                  }}
+                >
+                  Add
+                </SolidButton>
+              </div>
+            </div>
+          )}
         </div>
       )}
-
-      {topics.length === 0 && !isAdding && (
-        <p className="font-sans text-sm text-warm-brown/70">
-          No questions queued for the meeting yet.
-        </p>
-      )}
-
-      {topics.length > 0 && (
-        <ol className="space-y-2.5">
-          {topics.map((topic, i) => (
-            <li
-              key={topic.id}
-              className="flex gap-3 rounded-xl border border-charcoal/[0.08] bg-white/50 px-4 py-3"
-            >
-              <span className="font-serif text-lg text-gold/80 leading-none pt-0.5 w-5 flex-shrink-0 tabular-nums">
-                {i + 1}
-              </span>
-              <div className={`min-w-0 flex-1 ${revealed ? "spoiler-blur revealed" : "spoiler-blur"}`}>
-                <p className="font-sans text-[15px] text-charcoal leading-relaxed">{topic.content}</p>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <Avatar name={topic.member?.name || "?"} size="xs" />
-                  <span className="font-sans text-[11px] text-warm-brown/70">
-                    {topic.member?.name || "Anonymous"}
-                  </span>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
-
-      {memberId &&
-        (!isAdding ? (
-          <Button variant="secondary" className="w-full" onClick={() => setIsAdding(true)}>
-            Add a question
-          </Button>
-        ) : (
-          <div className="space-y-3">
-            <textarea
-              value={newTopic}
-              onChange={(e) => setNewTopic(e.target.value)}
-              placeholder="What do you want to talk about?"
-              className={textareaClass}
-              rows={3}
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => {
-                  setIsAdding(false);
-                  setNewTopic("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button className="flex-1" onClick={handleSubmit}>
-                Add
-              </Button>
-            </div>
-          </div>
-        ))}
     </div>
   );
 }

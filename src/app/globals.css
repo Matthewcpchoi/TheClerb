@@ -3,39 +3,88 @@
 @tailwind utilities;
 
 :root {
-  --background: #fbf5ea;
-  --foreground: #2b2622;
+  --ground: #fff5e7;
+  --tan: #e6d2b6;
+  --tan-soft: #f0e0c6;
+  --teal: #2dbba1;
+  --green: #009774;
+  --ink: #0e5f49;
+  --muted: #3d6a58;
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+  background: var(--ground);
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  /* A whisper of paper grain. Kept very faint so it reads as warmth, not noise. */
-  background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.018'/%3E%3C/svg%3E");
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: rgba(196, 154, 59, 0.3);
+  background: rgba(0, 151, 116, 0.18);
 }
 
-/* Scrollbar — subtle, on-palette */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Numbers are always monospace in this design. */
+.num {
+  font-family: ui-monospace, Menlo, Monaco, monospace;
+  font-variant-numeric: tabular-nums;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+/* 10px uppercase kicker, 0.16em tracking. */
+.kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(105, 56, 26, 0.25);
-  border-radius: 4px;
+.kicker-wide {
+  letter-spacing: 0.18em;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(105, 56, 26, 0.45);
+
+/* Section divider: 1px, fading to transparent at both ends. */
+.rule {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--tan) 44px,
+    var(--tan) calc(100% - 44px),
+    transparent
+  );
+}
+
+/* Row separators inside a list are plain. */
+.row-line {
+  border-bottom: 1px solid var(--tan-soft);
+}
+
+/* Scores stay blurred until someone reveals them. */
+.score-blur {
+  filter: blur(6px);
+}
+.score-reveal {
+  filter: blur(0);
+}
+.score-blur,
+.score-reveal {
+  transition: filter 0.45s ease;
+}
+
+/* Spine titles run vertically. */
+.spine-title {
+  writing-mode: vertical-rl;
+  text-align: right;
+  overflow: hidden;
+}
+
+/* The one shadow in the design: the lifted cover. */
+.cover-lift {
+  box-shadow: -7px 12px 20px rgba(14, 95, 73, 0.3);
 }
 
 .scrollbar-hide {
@@ -46,103 +95,25 @@ body {
   display: none;
 }
 
-/* Spoiler blur */
-.spoiler-blur {
-  filter: blur(8px);
-  user-select: none;
-  transition: filter 0.35s ease;
-}
-.spoiler-blur.revealed {
-  filter: blur(0);
-  user-select: auto;
-}
-
-/* Rating slider */
-input[type="range"].rating-slider {
-  -webkit-appearance: none;
+/* Native select, stripped back to a bordered control. */
+select.control {
   appearance: none;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(to right, #b5433e 0%, #c9862b 50%, #5f8a5b 80%, #c49a3b 100%);
-  outline: none;
-}
-input[type="range"].rating-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  appearance: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #fbf5ea;
-  border: 3px solid #3c1518;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(43, 38, 34, 0.25);
-}
-input[type="range"].rating-slider::-moz-range-thumb {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #fbf5ea;
-  border: 3px solid #3c1518;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(43, 38, 34, 0.25);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%230e5f49' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
 }
 
-/* A thin ledge under a row of covers — the one nod to the bookshelf idea. */
-.shelf-ledge {
-  position: relative;
-}
-.shelf-ledge::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -10px;
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, #a77c50 0%, #7a5535 100%);
-  box-shadow: 0 3px 6px rgba(43, 38, 34, 0.18);
-}
-
-/* A perfect 10 gets a slow, quiet glow. */
-@keyframes goldGlow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 3px rgba(196, 154, 59, 0.28), 0 4px 12px rgba(196, 154, 59, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 4px rgba(196, 154, 59, 0.45), 0 4px 18px rgba(196, 154, 59, 0.55);
-  }
-}
-.score-perfect {
-  animation: goldGlow 2.6s ease-in-out infinite;
-}
-
-/* Page enter */
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(5px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
-.page-transition {
-  animation: fadeUp 0.25s ease-out;
-}
-
-/* Expandable rows */
-@keyframes expand {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.expand-in {
-  animation: expand 0.18s ease-out;
+.screen-in {
+  animation: fadeUp 0.22s ease-out;
 }

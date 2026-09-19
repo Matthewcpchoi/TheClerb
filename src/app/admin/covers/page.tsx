@@ -88,7 +88,7 @@ function CoverPicker({
       <button
         onClick={loadOptions}
         disabled={loading}
-        className="px-3 py-1 rounded text-xs font-sans bg-gold/20 text-gold hover:bg-gold/30 transition-colors disabled:opacity-50"
+        className="px-3 py-1 rounded text-xs bg-tan/40 text-green hover:bg-tan/60 transition-colors disabled:opacity-50"
       >
         {loading ? "Loading…" : "Pick cover"}
       </button>
@@ -97,13 +97,13 @@ function CoverPicker({
 
   if (options.length === 0) {
     return (
-      <span className="font-sans text-xs text-warm-brown/50">no options</span>
+      <span className="text-xs text-muted">no options</span>
     );
   }
 
   return (
     <div className="w-full mt-3">
-      <p className="font-sans text-xs text-warm-brown/60 mb-2">
+      <p className="text-xs text-muted mb-2">
         Tap the correct cover:
       </p>
       <div className="flex gap-2 overflow-x-auto pb-2">
@@ -111,14 +111,14 @@ function CoverPicker({
           <button
             key={url}
             onClick={() => onChosen(url)}
-            className="flex-shrink-0 rounded border-2 border-transparent hover:border-gold transition-colors"
+            className="flex-shrink-0 rounded border-2 border-transparent hover:border-green transition-colors"
             title={url}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={url}
               alt="Cover option"
-              className="w-16 h-24 object-contain bg-cream-dark rounded"
+              className="w-16 h-24 object-contain bg-tan/40 rounded"
               referrerPolicy="no-referrer"
             />
           </button>
@@ -263,17 +263,17 @@ export default function CoverRepairPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="font-serif text-3xl sm:text-4xl text-charcoal tracking-tight mb-2">
+      <h1 className="text-3xl sm:text-4xl text-ink tracking-tight mb-2">
         Cover repair
       </h1>
-      <p className="font-sans text-sm text-warm-brown mb-6">
+      <p className="text-sm text-muted mb-6">
         {rows.length} books · {missing} with no cover URL stored
       </p>
 
       <button
         onClick={repairAll}
         disabled={running || rows.length === 0}
-        className="mb-8 px-5 py-2.5 rounded-lg bg-mahogany text-cream font-sans text-sm hover:bg-espresso transition-colors disabled:opacity-50"
+        className="mb-8 px-5 py-2.5 rounded-lg bg-ink text-ground text-sm hover:bg-espresso transition-colors disabled:opacity-50"
       >
         {running ? "Repairing…" : "Re-resolve every cover"}
       </button>
@@ -282,34 +282,34 @@ export default function CoverRepairPage() {
         {rows.map((row) => (
           <div
             key={row.book.id}
-            className="flex flex-wrap items-center gap-3 p-3 rounded-lg border border-cream-dark bg-white/50"
+            className="flex flex-wrap items-center gap-3 p-3 rounded-lg border border-tan bg-transparent"
           >
             <BookCover
               book={row.book}
               className="w-10 h-14 rounded flex-shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <p className="font-serif text-sm text-charcoal truncate">
+              <p className="text-sm text-ink truncate">
                 {row.book.title}
               </p>
-              <p className="font-sans text-xs text-warm-brown/60 truncate">
+              <p className="text-xs text-muted truncate">
                 {getBookCoverCandidates(row.book).length} candidate URLs
                 {row.book.isbn ? " · ISBN ✓" : " · no ISBN"}
                 {row.book.google_books_id ? " · volume id ✓" : " · no volume id"}
               </p>
               {row.note && (
-                <p className="font-sans text-xs text-warm-brown/50 truncate">
+                <p className="text-xs text-muted truncate">
                   {row.note}
                 </p>
               )}
             </div>
             <span
-              className={`font-sans text-xs flex-shrink-0 ${
+              className={`text-xs flex-shrink-0 ${
                 row.state === "fixed"
-                  ? "text-sage"
+                  ? "text-green"
                   : row.state === "failed"
                     ? "text-red-500"
-                    : "text-warm-brown/50"
+                    : "text-muted"
               }`}
             >
               {row.state}

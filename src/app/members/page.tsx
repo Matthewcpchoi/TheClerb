@@ -1,144 +1,75 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Member, Book, BookComment } from "@/types";
+import { Book } from "@/types";
 import { useMember } from "@/components/MemberProvider";
-import { getExactPageCount, cn } from "@/lib/utils";
-import BookCover from "@/components/BookCover";
-import { Avatar, Button, Card, PageHeader, ScoreBadge, inputClass } from "@/components/ui";
+import { Initials, Kicker, Num, OutlineButton, Rule, SolidButton } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
-interface RatingRow {
-  member_id: string;
-  book_id: string;
-  pre_rating: number | null;
-  post_rating: number | null;
+interface Stats {
+  read: number;
+  avg: number | null;
+  attended: number;
+  highest: { book: Book; score: number }[];
 }
 
-interface MemberStats {
-  booksRead: number;
-  avgRating: number | null;
-  meetingsAttended: number;
-  pagesRead: number;
-  scoresByBook: Record<string, number>;
-}
-
-/** One tile per finished book. Tap to drop down that member's score and take. */
-function MemberBookTile({
-  book,
-  score,
-  comment,
-  open,
-  onToggle,
-}: {
-  book: Book;
-  score?: number;
-  comment?: BookComment;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const hasDetail = typeof score === "number" || Boolean(comment);
-  return (
-    <button
-      onClick={hasDetail ? onToggle : undefined}
-      className={cn(
-        "w-[76px] flex-shrink-0 text-left rounded-lg transition-all",
-        open && "ring-2 ring-gold ring-offset-2 ring-offset-cream"
-      )}
-      aria-expanded={open}
-    >
-      <div className="relative">
-        <BookCover
-          book={book}
-          className="w-full aspect-[2/3] rounded-md shadow-md"
-          style={typeof score !== "number" ? { filter: "saturate(0.4) opacity(0.6)" } : undefined}
-        />
-        {typeof score === "number" && (
-          <ScoreBadge score={score} size="sm" className="absolute -bottom-2 -right-2" />
-        )}
-      </div>
-    </button>
-  );
-}
-
-export default function MembersPage() {
-  const { currentMember, setCurrentMember } = useMember();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [completedBooks, setCompletedBooks] = useState<Book[]>([]);
-  const [comments, setComments] = useState<BookComment[]>([]);
-  const [stats, setStats] = useState<Record<string, MemberStats>>({});
-  const [expandedMember, setExpandedMember] = useState<string | null>(null);
-  const [openTile, setOpenTile] = useState<string | null>(null); // `${memberId}:${bookId}`
+export default function ClubScreen() {
+  const { currentMember, setCurrentMember, members, refreshMembers } = useMember();
+  const [stats, setStats] = useState<Stats | null>(null);
   const [newName, setNewName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [{ data: membersData }, { data: booksData }, { data: ratingsData }, commentsRes, { data: attendanceData }] =
-      await Promise.all([
-        supabase.from("members").select("*").order("name"),
-        supabase.from("books").select("*").eq("status", "completed"),
-        supabase.from("ratings").select("member_id, book_id, pre_rating, post_rating, is_visible"),
-        supabase.from("book_comments").select("*"),
-        supabase.from("attendance").select("member_id, status").eq("status", "going"),
-      ]);
+    if (!currentMember) return;
+    const [{ data: ratings }, { data: books }, { count: attended }] = await Promise.all([
+      supabase
+        .from("ratings")
+        .select("book_id, pre_rating, post_rating")
+        .eq("member_id", currentMember.id),
+      supabase.from("books").select("*"),
+      supabase
+        .from("attendance")
+        .select("*", { count: "exact", head: true })
+        .eq("member_id", currentMember.id)
+        .eq("status", "going"),
+    ]);
 
-    const membersList = (membersData || []) as Member[];
-    const books = (booksData || []) as Book[];
-    const ratingRows = (ratingsData || []) as (RatingRow & { is_visible: boolean })[];
-    const commentRows = (commentsRes.error ? [] : commentsRes.data || []) as BookComment[];
+    const bookById = new Map((books || []).map((b) => [b.id, b as Book]));
+    const scored = (ratings || [])
+      .map((r) => ({ book_id: r.book_id, score: r.post_rating ?? r.pre_rating }))
+      .filter((r): r is { book_id: string; score: number } => r.score !== null);
 
-    // Club average per book, from revealed ratings, to order the shelf.
-    const avgByBook: Record<string, number> = {};
-    const buckets = new Map<string, number[]>();
-    for (const r of ratingRows) {
-      if (!r.is_visible) continue;
-      const v = r.post_rating ?? r.pre_rating;
-      if (v === null) continue;
-      buckets.set(r.book_id, [...(buckets.get(r.book_id) || []), v]);
-    }
-    buckets.forEach((vals, id) => {
-      avgByBook[id] = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const highest = scored
+      .slice()
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((r) => ({ book: bookById.get(r.book_id)!, score: r.score }))
+      .filter((r) => r.book);
+
+    setStats({
+      read: scored.length,
+      avg: scored.length ? scored.reduce((a, b) => a + b.score, 0) / scored.length : null,
+      attended: attended || 0,
+      highest,
     });
-
-    books.sort((a, b) => (avgByBook[b.id] ?? -1) - (avgByBook[a.id] ?? -1));
-
-    const attendedBy: Record<string, number> = {};
-    for (const a of attendanceData || []) attendedBy[a.member_id] = (attendedBy[a.member_id] || 0) + 1;
-
-    const statsMap: Record<string, MemberStats> = {};
-    for (const m of membersList) {
-      const rows = ratingRows.filter((r) => r.member_id === m.id);
-      const scoresByBook: Record<string, number> = {};
-      for (const r of rows) {
-        const v = r.post_rating ?? r.pre_rating;
-        if (v !== null) scoresByBook[r.book_id] = v;
-      }
-      const scores = Object.values(scoresByBook);
-      const ratedIds = new Set(Object.keys(scoresByBook));
-      statsMap[m.id] = {
-        booksRead: ratedIds.size,
-        avgRating: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
-        meetingsAttended: attendedBy[m.id] || 0,
-        pagesRead: books
-          .filter((b) => ratedIds.has(b.id))
-          .reduce((sum, b) => sum + (getExactPageCount(b) ?? 0), 0),
-        scoresByBook,
-      };
-    }
-
-    setMembers(membersList);
-    setCompletedBooks(books);
-    setComments(commentRows);
-    setStats(statsMap);
-  }, []);
+  }, [currentMember]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function handleAddMember() {
+  /** Earliest-joined member gets the founding label. */
+  const isFounding = useMemo(() => {
+    if (!currentMember || members.length === 0) return false;
+    const earliest = members
+      .slice()
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
+    return earliest?.id === currentMember.id;
+  }, [currentMember, members]);
+
+  async function handleAdd() {
     if (!newName.trim()) return;
     setError("");
     const { data, error: err } = await supabase
@@ -147,193 +78,138 @@ export default function MembersPage() {
       .select()
       .single();
     if (err) {
-      setError(err.code === "23505" ? "That name is already taken." : "Something went wrong.");
+      setError(err.code === "23505" ? "That name is taken." : "Something went wrong.");
       return;
     }
     if (data) {
       setNewName("");
       setIsAdding(false);
-      setCurrentMember(data);
-      load();
+      await refreshMembers();
     }
   }
 
+  if (!currentMember) {
+    return <div className="px-5 pt-[62px] text-[13px] text-muted">Pick who you are to see your profile.</div>;
+  }
+
+  const joined = new Date(currentMember.created_at).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+
   return (
-    <div className="max-w-3xl mx-auto">
-      <PageHeader eyebrow="The Clerb" title="Members" subtitle={`${members.length} in the club`} />
+    <div className="pt-[62px]">
+      <div className="px-5">
+        <div className="flex items-center gap-[14px]">
+          <Initials name={currentMember.name} size={56} />
+          <div className="min-w-0">
+            <p className="text-[22px] font-medium tracking-[-0.015em] text-ink">
+              {currentMember.name}
+            </p>
+            <p className="mt-[3px] text-[12.5px] text-muted">
+              {isFounding ? "Founding member" : "Member"} · joined {joined}
+            </p>
+          </div>
+        </div>
 
-      <div className="space-y-3 mb-8">
-        {members.map((member) => {
-          const s = stats[member.id];
-          const isYou = currentMember?.id === member.id;
-          const isOpen = expandedMember === member.id;
-
-          return (
-            <Card key={member.id} padded={false} className={cn(isYou && "border-gold/40")}>
-              <button
-                onClick={() => {
-                  setExpandedMember(isOpen ? null : member.id);
-                  setOpenTile(null);
-                }}
-                className="w-full flex items-center gap-4 p-4 sm:p-5 text-left"
-                aria-expanded={isOpen}
-              >
-                <Avatar name={member.name} size="lg" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-serif text-lg text-charcoal leading-tight">{member.name}</p>
-                  {isYou && <p className="font-sans text-xs text-gold mt-0.5">That&apos;s you</p>}
-                </div>
-
-                {s && (
-                  <div className="flex items-center gap-4 sm:gap-6">
-                    <div className="text-center">
-                      <p className="font-sans text-lg font-semibold tabular-nums text-charcoal leading-none">
-                        {s.booksRead}
-                      </p>
-                      <p className="font-sans text-[10px] uppercase tracking-wider text-warm-brown/60 mt-1">
-                        Rated
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      {s.avgRating !== null ? (
-                        <ScoreBadge score={s.avgRating} size="md" />
-                      ) : (
-                        <p className="font-sans text-lg text-warm-brown/40 leading-none">—</p>
-                      )}
-                      <p className="font-sans text-[10px] uppercase tracking-wider text-warm-brown/60 mt-1">
-                        Avg
-                      </p>
-                    </div>
-                    <div className="text-center hidden sm:block">
-                      <p className="font-sans text-lg font-semibold tabular-nums text-charcoal leading-none">
-                        {s.meetingsAttended}
-                      </p>
-                      <p className="font-sans text-[10px] uppercase tracking-wider text-warm-brown/60 mt-1">
-                        Met
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <svg
-                  className={cn("w-4 h-4 text-warm-brown/50 flex-shrink-0 transition-transform", isOpen && "rotate-180")}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {isOpen && s && (
-                <div className="expand-in border-t border-charcoal/[0.06] px-4 sm:px-5 pb-5 pt-4">
-                  <p className="font-sans text-xs text-warm-brown mb-4">
-                    {s.pagesRead.toLocaleString()} pages read · {s.meetingsAttended} meeting
-                    {s.meetingsAttended === 1 ? "" : "s"}
-                  </p>
-
-                  {completedBooks.length === 0 ? (
-                    <p className="font-sans text-sm text-warm-brown/60">No finished books yet.</p>
-                  ) : (
-                    <>
-                      <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-3 -mx-1 px-1">
-                        {completedBooks.map((book) => {
-                          const key = `${member.id}:${book.id}`;
-                          return (
-                            <MemberBookTile
-                              key={book.id}
-                              book={book}
-                              score={s.scoresByBook[book.id]}
-                              comment={comments.find(
-                                (c) => c.member_id === member.id && c.book_id === book.id
-                              )}
-                              open={openTile === key}
-                              onToggle={() => setOpenTile(openTile === key ? null : key)}
-                            />
-                          );
-                        })}
-                      </div>
-
-                      {openTile?.startsWith(`${member.id}:`) &&
-                        (() => {
-                          const bookId = openTile.split(":")[1];
-                          const book = completedBooks.find((b) => b.id === bookId);
-                          const score = s.scoresByBook[bookId];
-                          const comment = comments.find(
-                            (c) => c.member_id === member.id && c.book_id === bookId
-                          );
-                          if (!book) return null;
-                          return (
-                            <div className="expand-in mt-2 rounded-xl bg-charcoal/[0.04] px-4 py-3.5 flex gap-4">
-                              <div className="min-w-0 flex-1">
-                                <Link
-                                  href={`/book/${book.id}`}
-                                  className="font-serif text-[15px] text-charcoal hover:text-mahogany leading-snug"
-                                >
-                                  {book.title}
-                                </Link>
-                                {comment ? (
-                                  <p className="font-serif text-[15px] text-charcoal/85 italic leading-relaxed mt-1.5">
-                                    &ldquo;{comment.content}&rdquo;
-                                  </p>
-                                ) : (
-                                  <p className="font-sans text-xs text-warm-brown/60 mt-1.5">
-                                    {member.name.split(" ")[0]} didn&apos;t leave a note on this one.
-                                  </p>
-                                )}
-                              </div>
-                              {typeof score === "number" && <ScoreBadge score={score} size="lg" />}
-                            </div>
-                          );
-                        })()}
-                    </>
-                  )}
-                </div>
-              )}
-            </Card>
-          );
-        })}
+        <div className="mt-[22px] flex gap-7">
+          <Stat label="Read" value={stats ? String(stats.read) : "—"} />
+          <Stat
+            label="Your average"
+            value={stats?.avg != null ? stats.avg.toFixed(1) : "—"}
+          />
+          <Stat label="Attended" value={stats ? String(stats.attended) : "—"} />
+        </div>
       </div>
 
-      <Card>
-        <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-warm-brown mb-4">
-          Join the club
-        </p>
-        {!isAdding ? (
-          <Button variant="secondary" className="w-full" onClick={() => setIsAdding(true)}>
-            Add yourself
-          </Button>
+      <div className="mt-6">
+        <Rule />
+      </div>
+
+      <section className="px-5 pt-5">
+        <Kicker>Your highest</Kicker>
+        {!stats || stats.highest.length === 0 ? (
+          <p className="py-4 text-[12.5px] text-muted">
+            Nothing rated yet. Scores you give show up here.
+          </p>
         ) : (
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddMember()}
-              placeholder="Your name"
-              className={inputClass}
-              autoFocus
-            />
-            {error && <p className="font-sans text-sm text-red-700">{error}</p>}
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => {
-                  setIsAdding(false);
-                  setNewName("");
-                  setError("");
-                }}
+          stats.highest.map((h, i) => (
+            <div
+              key={h.book.id}
+              className={cn(
+                "flex items-center justify-between py-3",
+                i < stats.highest.length - 1 && "row-line"
+              )}
+            >
+              <span className={cn("text-[14px]", i === 2 ? "text-muted" : "text-ink")}>
+                {h.book.title}
+              </span>
+              <Num
+                className={cn("text-[16px] font-semibold", i === 2 ? "text-muted" : "text-green")}
               >
-                Cancel
-              </Button>
-              <Button className="flex-1" onClick={handleAddMember}>
-                Join
-              </Button>
+                {h.score.toFixed(1)}
+              </Num>
             </div>
-          </div>
+          ))
         )}
-      </Card>
+      </section>
+
+      <div className="mt-6">
+        <Rule />
+      </div>
+
+      {/* Switching members is not in the design — the club needs it on a shared device. */}
+      <section className="px-5 pt-5">
+        <Kicker>The club</Kicker>
+        <div className="mt-3 flex flex-wrap gap-[10px]">
+          {members
+            .filter((m) => m.id !== currentMember.id)
+            .map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setCurrentMember(m)}
+                className="rounded-full border border-tan px-[13px] py-[6px] text-[12.5px] text-muted active:bg-tan/30"
+              >
+                {m.name}
+              </button>
+            ))}
+        </div>
+
+        <div className="mt-4">
+          {!isAdding ? (
+            <OutlineButton onClick={() => setIsAdding(true)}>Add a member</OutlineButton>
+          ) : (
+            <div className="space-y-2">
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                placeholder="Their name"
+                autoFocus
+                className="w-full rounded-lg border border-tan bg-transparent px-3 py-[9px] text-[14px] text-ink outline-none placeholder:text-muted/60 focus:border-green"
+              />
+              {error && <p className="text-[12px] text-muted">{error}</p>}
+              <div className="flex gap-2">
+                <OutlineButton className="flex-1" onClick={() => setIsAdding(false)}>
+                  Cancel
+                </OutlineButton>
+                <SolidButton className="flex-1" onClick={handleAdd}>
+                  Add
+                </SolidButton>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <Num className="text-[22px] font-semibold text-ink">{value}</Num>
+      <p className="mt-[5px] text-[10px] uppercase tracking-[0.12em] text-muted">{label}</p>
     </div>
   );
 }

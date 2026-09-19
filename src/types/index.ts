@@ -10,9 +10,9 @@ export interface Book {
   author: string | null;
   cover_url: string | null;
   thumbnail_url: string | null;
+  isbn: string | null;
   spine_color: string | null;
   google_books_id: string | null;
-  isbn: string | null;
   description?: string | null;
   total_pages: number | null;
   status: "reading" | "completed" | "upcoming";
@@ -20,6 +20,17 @@ export interface Book {
   page_count: number | null;
   completed_at: string | null;
   created_at: string;
+}
+
+/** Where one member is with one book. Status, never page numbers. */
+export type ProgressStatus = "none" | "reading" | "finished" | "dnf";
+
+export interface BookProgress {
+  id: string;
+  book_id: string;
+  member_id: string;
+  status: ProgressStatus;
+  updated_at: string;
 }
 
 export interface Rating {

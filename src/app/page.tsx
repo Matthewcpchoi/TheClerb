@@ -1,183 +1,297 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { Book, Meeting } from "@/types";
-import { formatDate, formatTime, getExactPageCount } from "@/lib/utils";
+import { Book, Meeting, Member, ProgressStatus, Rating } from "@/types";
+import { useMember } from "@/components/MemberProvider";
 import BookCover from "@/components/BookCover";
-import { Card, LinkButton, ScoreBadge, SectionTitle, StatusPill } from "@/components/ui";
+import { Kicker, Num, PillButton } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
-interface Stats {
-  totalBooks: number;
-  totalMembers: number;
-  avgRating: number | null;
-  totalPages: number | null;
+/** Ledger order: finished first (by score), then reading, not started, DNF. */
+const GROUP: Record<ProgressStatus, number> = { finished: 0, reading: 1, none: 2, dnf: 3 };
+const CYCLE: ProgressStatus[] = ["none", "reading", "finished", "dnf"];
+
+const STATUS_LABEL: Record<Exclude<ProgressStatus, "finished">, string> = {
+  reading: "In progress",
+  none: "Not started",
+  dnf: "Gave up",
+};
+
+interface LedgerRow {
+  member: Member;
+  status: ProgressStatus;
+  score: number | null;
+  scored: boolean;
+  isMe: boolean;
 }
 
-export default function Home() {
-  const [currentBook, setCurrentBook] = useState<Book | null>(null);
-  const [currentScore, setCurrentScore] = useState<number | null>(null);
-  const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
+export default function ReadingScreen() {
+  const { currentMember, members } = useMember();
+  const [book, setBook] = useState<Book | null>(null);
+  const [progress, setProgress] = useState<Record<string, ProgressStatus>>({});
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [goingCount, setGoingCount] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      const today = new Date().toISOString().split("T")[0];
+  const load = useCallback(async () => {
+    const { data: reading } = await supabase
+      .from("books")
+      .select("*")
+      .eq("status", "reading")
+      .limit(1)
+      .maybeSingle();
 
-      const [{ data: reading }, { data: meetings }, { data: completed }, { count: memberCount }, { data: ratings }] =
-        await Promise.all([
-          supabase.from("books").select("*").eq("status", "reading").limit(1).maybeSingle(),
-          supabase
-            .from("meetings")
-            .select("*, book:books(*)")
-            .gte("date", today)
-            .order("date", { ascending: true })
-            .order("time", { ascending: true })
-            .limit(1),
-          supabase.from("books").select("*").eq("status", "completed"),
-          supabase.from("members").select("*", { count: "exact", head: true }),
-          supabase.from("ratings").select("book_id, pre_rating, post_rating").eq("is_visible", true),
-        ]);
+    setBook(reading ?? null);
 
-      if (reading) setCurrentBook(reading);
-      if (meetings && meetings.length > 0) setNextMeeting(meetings[0]);
+    if (reading) {
+      const [{ data: prog }, { data: rats }] = await Promise.all([
+        supabase.from("book_progress").select("member_id, status").eq("book_id", reading.id),
+        supabase.from("ratings").select("*").eq("book_id", reading.id),
+      ]);
+      const map: Record<string, ProgressStatus> = {};
+      for (const p of prog || []) map[p.member_id] = p.status;
+      setProgress(map);
+      setRatings(rats || []);
+      setRevealed(localStorage.getItem(`reveal-${reading.id}`) === "true");
+    }
 
-      const vals = (ratings || [])
-        .map((r) => r.post_rating ?? r.pre_rating)
-        .filter((v): v is number => v !== null);
+    const today = new Date().toISOString().split("T")[0];
+    const { data: meetings } = await supabase
+      .from("meetings")
+      .select("*")
+      .gte("date", today)
+      .order("date", { ascending: true })
+      .order("time", { ascending: true })
+      .limit(1);
 
-      if (reading) {
-        const mine = (ratings || [])
-          .filter((r) => r.book_id === reading.id)
-          .map((r) => r.post_rating ?? r.pre_rating)
-          .filter((v): v is number => v !== null);
-        if (mine.length) setCurrentScore(mine.reduce((a, b) => a + b, 0) / mine.length);
-      }
-
-      const pageValues = (completed || [])
-        .map((b) => getExactPageCount(b))
-        .filter((v): v is number => typeof v === "number");
-
-      setStats({
-        totalBooks: (completed || []).length,
-        totalMembers: memberCount || 0,
-        avgRating: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
-        totalPages: pageValues.length ? pageValues.reduce((a, b) => a + b, 0) : null,
-      });
-    })();
+    const next = meetings?.[0] ?? null;
+    setMeeting(next);
+    if (next) {
+      const { count } = await supabase
+        .from("attendance")
+        .select("*", { count: "exact", head: true })
+        .eq("meeting_id", next.id)
+        .eq("status", "going");
+      setGoingCount(count || 0);
+    }
+    setLoading(false);
   }, []);
 
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="pt-2 pb-10 sm:pt-6 sm:pb-14">
-        <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-gold mb-3">
-          Book club
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const rows = useMemo<LedgerRow[]>(() => {
+    const scoreFor = (memberId: string) => {
+      const r = ratings.find((x) => x.member_id === memberId);
+      if (!r) return null;
+      return r.post_rating ?? r.pre_rating;
+    };
+    return members
+      .map((member) => {
+        const status = progress[member.id] ?? "none";
+        const score = scoreFor(member.id);
+        return {
+          member,
+          status,
+          score,
+          scored: score !== null && status !== "none",
+          isMe: member.id === currentMember?.id,
+        };
+      })
+      .sort(
+        (a, b) =>
+          GROUP[a.status] - GROUP[b.status] || (b.score ?? -1) - (a.score ?? -1)
+      );
+  }, [members, progress, ratings, currentMember]);
+
+  function toggleReveal() {
+    if (!book) return;
+    const next = !revealed;
+    setRevealed(next);
+    localStorage.setItem(`reveal-${book.id}`, String(next));
+  }
+
+  /** Tapping your own name moves you along: none → reading → finished → DNF. */
+  async function cycleOwnStatus() {
+    if (!currentMember || !book) return;
+    const current = progress[currentMember.id] ?? "none";
+    const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
+    setProgress((p) => ({ ...p, [currentMember.id]: next }));
+    await supabase.from("book_progress").upsert(
+      {
+        book_id: book.id,
+        member_id: currentMember.id,
+        status: next,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "book_id,member_id" }
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="h-[300px] animate-pulse bg-tan/40" />
+    );
+  }
+
+  if (!book) {
+    return (
+      <div className="px-5 pt-[62px]">
+        <Kicker tone="green" wide>
+          Reading now
+        </Kicker>
+        <p className="mt-3 text-[34px] font-medium leading-[1.05] tracking-[-0.025em] text-ink">
+          Nothing on
+          <br />
+          the go
         </p>
-        <h1 className="font-serif text-5xl sm:text-6xl text-charcoal tracking-tight leading-none">
-          The Clerb
-        </h1>
+        <p className="mt-3 text-[13.5px] text-muted">
+          Pick the next one from the shelf.
+        </p>
+        <Link
+          href="/shelf"
+          className="mt-5 inline-block rounded-lg border border-green px-4 py-[9px] text-[13px] font-medium text-ink"
+        >
+          Go to the shelf
+        </Link>
       </div>
+    );
+  }
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-        {/* Currently reading — hero */}
-        <Card className="md:col-span-3 overflow-hidden" padded={false}>
-          {currentBook ? (
-            <Link href={`/book/${currentBook.id}`} className="flex gap-5 sm:gap-7 p-5 sm:p-7 group">
-              <div className="relative flex-shrink-0">
-                <BookCover
-                  book={currentBook}
-                  className="w-28 sm:w-36 aspect-[2/3] rounded-lg shadow-[0_4px_8px_rgba(43,38,34,0.15),0_20px_40px_-16px_rgba(43,38,34,0.45)] transition-transform group-hover:-translate-y-1"
-                  eager
-                />
-                {currentScore !== null && (
-                  <ScoreBadge score={currentScore} size="lg" className="absolute -bottom-3 -right-3" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1 flex flex-col">
-                <StatusPill status="reading" />
-                <h2 className="font-serif text-2xl sm:text-3xl text-charcoal leading-tight tracking-tight mt-3 group-hover:text-mahogany transition-colors">
-                  {currentBook.title}
-                </h2>
-                {currentBook.author && (
-                  <p className="font-sans text-sm sm:text-base text-warm-brown mt-1.5">{currentBook.author}</p>
-                )}
-                <p className="font-sans text-xs text-gold mt-auto pt-4">Rate &amp; discuss →</p>
-              </div>
-            </Link>
-          ) : (
-            <div className="p-7 flex flex-col items-start gap-4">
-              <StatusPill status="reading" />
-              <p className="font-serif text-xl text-charcoal">Nothing on the go right now.</p>
-              <LinkButton href="/shelf" variant="secondary">
-                Pick the next book
-              </LinkButton>
-            </div>
-          )}
-        </Card>
+  const revealCount = rows.filter((r) => r.scored && !r.isMe).length;
 
-        {/* Next meeting */}
-        <Card className="md:col-span-2" padded={false}>
-          {nextMeeting ? (
-            <Link href="/calendar" className="block p-5 sm:p-6 h-full group">
-              <SectionTitle>Next meeting</SectionTitle>
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-14 rounded-xl bg-gold/15 py-2 text-center">
-                  <p className="font-sans text-2xl font-semibold text-[#8a6a22] leading-none tabular-nums">
-                    {new Date(nextMeeting.date + "T00:00:00").getDate()}
-                  </p>
-                  <p className="font-sans text-[10px] uppercase tracking-wider text-[#8a6a22]/80 mt-1">
-                    {new Date(nextMeeting.date + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
-                  </p>
-                </div>
-                <div className="min-w-0">
-                  <p className="font-serif text-lg text-charcoal leading-snug group-hover:text-mahogany transition-colors">
-                    {nextMeeting.title}
-                  </p>
-                  <p className="font-sans text-sm text-warm-brown mt-1">
-                    {formatDate(nextMeeting.date).split(",")[0]} · {formatTime(nextMeeting.time)}
-                  </p>
-                  {nextMeeting.location && (
-                    <p className="font-sans text-xs text-warm-brown/60 mt-0.5 truncate">{nextMeeting.location}</p>
-                  )}
-                </div>
-              </div>
-            </Link>
-          ) : (
-            <Link href="/calendar" className="block p-5 sm:p-6 h-full group">
-              <SectionTitle>Next meeting</SectionTitle>
-              <p className="font-serif text-lg text-charcoal">Nothing scheduled.</p>
-              <p className="font-sans text-xs text-gold mt-3 group-hover:underline">Schedule one →</p>
-            </Link>
-          )}
-        </Card>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat label="Books finished" value={stats ? String(stats.totalBooks) : "—"} />
-        <Stat label="Pages read" value={stats?.totalPages ? stats.totalPages.toLocaleString() : "—"} />
-        <Stat label="Members" value={stats ? String(stats.totalMembers) : "—"} />
-        <Card className="flex flex-col items-center justify-center py-5">
-          {stats?.avgRating !== null && stats?.avgRating !== undefined ? (
-            <ScoreBadge score={stats.avgRating} size="lg" />
-          ) : (
-            <p className="font-sans text-3xl text-warm-brown/40 leading-none">—</p>
-          )}
-          <p className="font-sans text-[11px] uppercase tracking-wider text-warm-brown/70 mt-3">
-            Club average
+  return (
+    <div>
+      {/* Cover header, full bleed under the status bar */}
+      <Link href={`/book/${book.id}`} className="relative block h-[300px] overflow-hidden">
+        <BookCover book={book} className="h-full w-full" fit="cover" eager />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg,rgba(255,245,231,.06) 0%,rgba(255,245,231,0) 30%,rgba(255,245,231,.82) 78%,#fff5e7 100%)",
+          }}
+        />
+        <div className="absolute inset-x-5 bottom-4">
+          <Kicker tone="green" wide>
+            Reading now
+          </Kicker>
+          <h1 className="mt-2 text-[34px] font-medium leading-[1.05] tracking-[-0.025em] text-ink">
+            {book.title}
+          </h1>
+          <p className="mt-2 text-[13.5px] text-muted">
+            {book.author}
+            {book.page_count ? (
+              <>
+                {" · "}
+                <Num>{book.page_count}</Num> pp
+              </>
+            ) : null}
           </p>
-        </Card>
-      </div>
+        </div>
+      </Link>
+
+      {/* The ledger */}
+      <section className="px-5 pt-[18px]">
+        <div className="flex items-center justify-between">
+          <Kicker>Where everyone is</Kicker>
+          {revealCount > 0 && (
+            <PillButton onClick={toggleReveal}>
+              {revealed ? "Hide" : "Reveal scores"}
+            </PillButton>
+          )}
+        </div>
+
+        <div className="mt-3">
+          {rows.length === 0 && (
+            <p className="py-3 text-[13px] text-muted">No members yet.</p>
+          )}
+          {rows.map((row) => {
+            const { member, status, score, scored, isMe } = row;
+            const mark =
+              scored ? "bg-green" : status === "reading" ? "bg-teal" : "bg-transparent";
+            return (
+              <div key={member.id} className="row-line flex items-center gap-3 py-[11px]">
+                <span className={cn("w-[2px] self-stretch rounded-sm", mark)} />
+                <button
+                  onClick={isMe ? cycleOwnStatus : undefined}
+                  disabled={!isMe}
+                  className={cn(
+                    "text-left text-[14.5px]",
+                    status === "none" || status === "dnf" ? "text-muted" : "text-ink",
+                    status === "dnf" && "line-through",
+                    isMe && "cursor-pointer"
+                  )}
+                  title={isMe ? "Tap to change your status" : undefined}
+                >
+                  {member.name}
+                  {isMe && " (you)"}
+                </button>
+                <span className="flex-1" />
+                {scored ? (
+                  <Num
+                    className={cn(
+                      "text-[17px] font-semibold text-ink",
+                      !isMe && (revealed ? "score-reveal" : "score-blur")
+                    )}
+                  >
+                    {score!.toFixed(1)}
+                  </Num>
+                ) : (
+                  <span className="text-[11px] uppercase tracking-[0.1em] text-muted">
+                    {STATUS_LABEL[status as Exclude<ProgressStatus, "finished">]}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {currentMember && (
+          <p className="pt-3 text-[11px] text-muted/80">Tap your name to change your status.</p>
+        )}
+      </section>
+
+      {/* Next meeting */}
+      {meeting && (
+        <section className="flex items-end justify-between gap-4 px-5 pt-6">
+          <div>
+            <Kicker>
+              {new Date(meeting.date + "T00:00:00").toLocaleDateString("en-US", {
+                weekday: "long",
+                day: "numeric",
+                month: "short",
+              })}
+            </Kicker>
+            <p className="mt-[6px] text-[18px] text-ink">
+              {formatClock(meeting.time)}
+              {meeting.location ? ` · ${meeting.location}` : ""}
+            </p>
+            <p className="mt-1 text-[12.5px] text-muted">
+              {meeting.notes ? `${meeting.notes} · ` : ""}
+              <Num>{goingCount}</Num> going
+            </p>
+          </div>
+          <Link
+            href="/calendar"
+            className="whitespace-nowrap rounded-lg border border-green px-4 py-[9px] text-[13px] font-medium text-ink"
+          >
+            RSVP
+          </Link>
+        </section>
+      )}
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="flex flex-col items-center justify-center py-5">
-      <p className="font-serif text-4xl text-charcoal leading-none tabular-nums">{value}</p>
-      <p className="font-sans text-[11px] uppercase tracking-wider text-warm-brown/70 mt-3">{label}</p>
-    </Card>
-  );
+function formatClock(time: string): string {
+  const [h, m] = time.split(":");
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? "PM" : "AM";
+  return `${hour % 12 || 12}:${m} ${ampm}`;
 }

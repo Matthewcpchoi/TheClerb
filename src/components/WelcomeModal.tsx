@@ -1,29 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Member } from "@/types";
-import { Avatar, Button, inputClass } from "./ui";
+import { useMember } from "./MemberProvider";
+import { Initials, Kicker, OutlineButton, SolidButton } from "./ui";
 
-interface WelcomeModalProps {
-  onSelect: (member: Member) => void;
-}
-
-export default function WelcomeModal({ onSelect }: WelcomeModalProps) {
-  const [members, setMembers] = useState<Member[]>([]);
+/**
+ * Joining is not in the design — see the README's Gaps. Built in the same
+ * palette and type scale so it does not read as a different app.
+ */
+export default function WelcomeModal({ onSelect }: { onSelect: (m: Member) => void }) {
+  const { members } = useMember();
   const [newName, setNewName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    supabase
-      .from("members")
-      .select("*")
-      .order("name")
-      .then(({ data }) => data && setMembers(data));
-  }, []);
-
-  async function handleAddMember() {
+  async function handleAdd() {
     if (!newName.trim()) return;
     setError("");
     const { data, error: err } = await supabase
@@ -32,78 +25,63 @@ export default function WelcomeModal({ onSelect }: WelcomeModalProps) {
       .select()
       .single();
     if (err) {
-      setError(err.code === "23505" ? "That name is already taken." : "Something went wrong. Try again.");
+      setError(err.code === "23505" ? "That name is taken." : "Something went wrong.");
       return;
     }
     if (data) onSelect(data);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-charcoal/55 backdrop-blur-sm sm:p-4">
-      <div className="bg-cream w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden">
-        <div className="bg-mahogany px-6 pt-8 pb-7 text-center">
-          <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-gold-light/80 mb-2">
-            Welcome to
-          </p>
-          <h1 className="font-serif text-4xl text-cream tracking-tight">The Clerb</h1>
-        </div>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/25 backdrop-blur-sm sm:items-center">
+      <div className="w-full max-w-[448px] rounded-t-[26px] bg-ground p-5 pb-8 sm:rounded-[26px]">
+        <Kicker tone="green" wide>
+          The Clerb
+        </Kicker>
+        <p className="mt-2 text-[24px] font-medium leading-none tracking-[-0.02em] text-ink">
+          Who are you?
+        </p>
 
-        <div className="p-6">
-          <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-warm-brown mb-3">
-            Who are you?
-          </p>
+        {members.length > 0 && (
+          <div className="mt-5 max-h-[45vh] overflow-y-auto">
+            {members.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onSelect(m)}
+                className="row-line flex w-full items-center gap-3 py-[11px] text-left"
+              >
+                <Initials name={m.name} size={36} />
+                <span className="text-[14.5px] text-ink">{m.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-          {members.length > 0 && (
-            <div className="space-y-1.5 mb-5 max-h-[40vh] overflow-y-auto -mx-1 px-1">
-              {members.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => onSelect(m)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-charcoal/[0.08] bg-white/60 hover:border-gold hover:bg-gold/5 transition-all text-left"
-                >
-                  <Avatar name={m.name} size="md" />
-                  <span className="font-sans text-[15px] text-charcoal">{m.name}</span>
-                </button>
-              ))}
+        <div className="mt-5">
+          {!isAdding ? (
+            <OutlineButton className="w-full" onClick={() => setIsAdding(true)}>
+              I&apos;m new here
+            </OutlineButton>
+          ) : (
+            <div className="space-y-3">
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                placeholder="Your name"
+                autoFocus
+                className="w-full rounded-lg border border-tan bg-transparent px-3 py-[10px] text-[15px] text-ink outline-none placeholder:text-muted/60 focus:border-green"
+              />
+              {error && <p className="text-[12px] text-muted">{error}</p>}
+              <div className="flex gap-2">
+                <OutlineButton className="flex-1" onClick={() => setIsAdding(false)}>
+                  Cancel
+                </OutlineButton>
+                <SolidButton className="flex-1" onClick={handleAdd}>
+                  Join
+                </SolidButton>
+              </div>
             </div>
           )}
-
-          <div className={members.length > 0 ? "border-t border-charcoal/[0.06] pt-4" : ""}>
-            {!isAdding ? (
-              <Button variant="secondary" className="w-full" onClick={() => setIsAdding(true)}>
-                I&apos;m new here
-              </Button>
-            ) : (
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddMember()}
-                  placeholder="Your name"
-                  className={inputClass}
-                  autoFocus
-                />
-                {error && <p className="font-sans text-sm text-red-700">{error}</p>}
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => {
-                      setIsAdding(false);
-                      setNewName("");
-                      setError("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button className="flex-1" onClick={handleAddMember}>
-                    Join
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>
