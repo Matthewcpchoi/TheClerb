@@ -69,6 +69,8 @@ export interface DiscussionTopic {
 export interface Meeting {
   id: string;
   book_id: string | null;
+  /** Which club member is hosting. */
+  host_id: string | null;
   title: string;
   date: string;
   time: string;

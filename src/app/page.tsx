@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Book, Meeting, Member, ProgressStatus, Rating } from "@/types";
 import { useMember } from "@/components/MemberProvider";
 import BookCover from "@/components/BookCover";
+import { CaretUpDown, PencilSimple } from "@phosphor-icons/react";
 import { Kicker, Num, PillButton } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -218,30 +219,50 @@ export default function ReadingScreen() {
             return (
               <div key={member.id} className="row-line flex items-center gap-3 py-[11px]">
                 <span className={cn("w-[2px] self-stretch rounded-sm", mark)} />
-                <button
-                  onClick={isMe ? cycleOwnStatus : undefined}
-                  disabled={!isMe}
+                <span
                   className={cn(
-                    "text-left text-[14.5px]",
+                    "text-[14.5px]",
                     status === "none" || status === "dnf" ? "text-muted" : "text-ink",
-                    status === "dnf" && "line-through",
-                    isMe && "cursor-pointer"
+                    status === "dnf" && "line-through"
                   )}
-                  title={isMe ? "Tap to change your status" : undefined}
                 >
                   {member.name}
                   {isMe && " (you)"}
-                </button>
+                </span>
                 <span className="flex-1" />
+
                 {scored ? (
-                  <Num
-                    className={cn(
-                      "text-[17px] font-semibold text-ink",
-                      !isMe && (revealed ? "score-reveal" : "score-blur")
-                    )}
+                  // Your own score is a way in to change it; everyone else's
+                  // stays blurred until the club reveals.
+                  isMe ? (
+                    <Link
+                      href={`/book/${book.id}`}
+                      className="flex items-center gap-[5px] text-ink active:opacity-70"
+                    >
+                      <Num className="text-[17px] font-semibold">{score!.toFixed(1)}</Num>
+                      <PencilSimple size={13} className="text-green" />
+                    </Link>
+                  ) : (
+                    <Num
+                      className={cn(
+                        "text-[17px] font-semibold text-ink",
+                        revealed ? "score-reveal" : "score-blur"
+                      )}
+                    >
+                      {score!.toFixed(1)}
+                    </Num>
+                  )
+                ) : isMe ? (
+                  // The control is the value itself: a picker you tap to move
+                  // yourself along, rather than a label with a hint beside it.
+                  <button
+                    onClick={cycleOwnStatus}
+                    className="flex items-center gap-[6px] rounded-lg border border-tan px-[10px] py-[5px] text-[11px] uppercase tracking-[0.1em] text-ink transition-colors active:bg-tan/40"
+                    aria-label={`Your status: ${STATUS_LABEL[status as Exclude<ProgressStatus, "finished">]}. Tap to change.`}
                   >
-                    {score!.toFixed(1)}
-                  </Num>
+                    {STATUS_LABEL[status as Exclude<ProgressStatus, "finished">]}
+                    <CaretUpDown size={13} className="text-green" />
+                  </button>
                 ) : (
                   <span className="text-[11px] uppercase tracking-[0.1em] text-muted">
                     {STATUS_LABEL[status as Exclude<ProgressStatus, "finished">]}
@@ -251,10 +272,6 @@ export default function ReadingScreen() {
             );
           })}
         </div>
-
-        {currentMember && (
-          <p className="pt-3 text-[11px] text-muted/80">Tap your name to change your status.</p>
-        )}
       </section>
 
       {/* Next meeting */}
