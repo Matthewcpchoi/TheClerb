@@ -21,8 +21,8 @@ import { getExactPageCount, cn } from "@/lib/utils";
 import { leather, scoreColor } from "@/lib/design";
 
 const SORTS = [
-  "Score · High To Low",
-  "Score · Low To High",
+  "Score · High to Low",
+  "Score · Low to High",
   "Title A–Z",
   "Recently Read",
 ] as const;
@@ -93,7 +93,7 @@ export default function ClubScreen() {
   const sortedBooks = useMemo(() => {
     const copy = scored.slice();
     switch (sort) {
-      case "Score · Low To High":
+      case "Score · Low to High":
         return copy.sort((a, b) => a.score - b.score);
       case "Title A–Z":
         return copy.sort((a, b) => a.book.title.localeCompare(b.book.title));
@@ -181,7 +181,7 @@ export default function ClubScreen() {
             className="mb-4 flex items-center gap-[6px] text-[12.5px] text-green"
           >
             <ArrowUUpLeft size={14} />
-            Back To Your Profile
+            Back to Your Profile
           </button>
         )}
 
@@ -325,7 +325,10 @@ export default function ClubScreen() {
                 {isAdmin && m.id !== currentMember?.id && (
                   <>
                     <button
-                      onClick={() => setCurrentMember(m)}
+                      onClick={() => {
+                        // Switching means acting as someone else; worth a beat.
+                        if (confirm(`Use the app as ${m.name}?`)) setCurrentMember(m);
+                      }}
                       className="flex-none text-[11.5px] text-green"
                     >
                       Switch
@@ -341,7 +344,7 @@ export default function ClubScreen() {
         {isAdmin && (
           <div className="mt-4">
             {!isAdding ? (
-              <OutlineButton onClick={() => setIsAdding(true)}>Add A Member</OutlineButton>
+              <OutlineButton onClick={() => setIsAdding(true)}>Add a Member</OutlineButton>
             ) : (
               <div className="space-y-2">
                 <input

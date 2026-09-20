@@ -10,11 +10,15 @@ import { leather, scoreColor, spineHeight, spineWidth, textOn } from "@/lib/desi
  * The shelf reads like the number wheel on a clock app: the frame holds still
  * and the books travel behind it.
  *
- * Two things the first pass got wrong. CSS scroll-snap with large end padding
- * left the last books unreachable in Safari, so settling is done by hand here.
- * And the frame used to sit on top of its neighbours; now the selected book's
- * slot widens to the frame's width once the wheel comes to rest, so the cover
- * occupies a gap of its own instead of covering the books either side.
+ * The frame never moves and never hides — holding a book still in the middle
+ * while the rest slide past is the whole point of the thing.
+ *
+ * Two earlier problems, both fixed here. CSS scroll-snap with large end
+ * padding left the last books unreachable in Safari, so settling is done by
+ * hand and the padding is replaced by spacer elements. And the frame used to
+ * sit on top of its neighbours; the focused book's slot now widens to the
+ * frame's width, so the cover occupies a gap of its own rather than covering
+ * the books either side.
  */
 
 const FRAME_W = 104;
@@ -120,7 +124,6 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
   );
 
   const current = books[focused];
-  const settled = !scrolling;
 
   return (
     <div className="relative select-none" style={{ height: HEIGHT }}>
@@ -151,7 +154,7 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
             const ink = stored ? textOn(stored) : skin.text;
             const w = spineWidth(b.title);
             const h = spineHeight(b.title);
-            const isOpen = settled && i === focused;
+            const isOpen = i === focused;
 
             return (
               <div
@@ -203,8 +206,7 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
         </div>
       </div>
 
-      {/* The frame. Hidden while the wheel turns, so it never sits over a
-          book that is still moving. */}
+      {/* The frame: fixed in place, always on. Only its contents change. */}
       {current && (
         <div
           className="pointer-events-none absolute z-10 overflow-hidden"
@@ -213,9 +215,7 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
             height: FRAME_H,
             left: "50%",
             bottom: SCORE_ROW,
-            transform: `translateX(-50%) scale(${settled ? 1 : 0.94})`,
-            opacity: settled ? 1 : 0,
-            transition: "opacity .18s ease, transform .18s ease",
+            transform: "translateX(-50%)",
             borderRadius: "2px 4px 4px 2px",
             background: current.spine_color || leather(current.title).hex,
             boxShadow:

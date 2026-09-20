@@ -105,29 +105,70 @@ export default function QuoteCapture({
       const sw = box.w * img.naturalWidth;
       const sh = box.h * img.naturalHeight;
 
-      const scale = Math.min(3, Math.max(1, 1200 / Math.max(sw, 1)));
+      // Upscale hard. Tesseract wants roughly 30px-tall characters, and a
+      // cropped paragraph off a phone photo is usually well under that.
+      const scale = Math.min(6, Math.max(2, 2400 / Math.max(sw, 1)));
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(sw * scale);
       canvas.height = Math.round(sh * scale);
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) throw new Error("no canvas");
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-      // Grey and lift the contrast; printed pages read far better for it.
+      // Grey, then threshold with Otsu. A fixed contrast curve left grey
+      // paper and ink too close together, which is what turned whole words
+      // into punctuation soup.
       const px = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      for (let i = 0; i < px.data.length; i += 4) {
-        const g = 0.299 * px.data[i] + 0.587 * px.data[i + 1] + 0.114 * px.data[i + 2];
-        const v = g < 128 ? g * 0.7 : Math.min(255, g * 1.2);
+      const grey = new Uint8ClampedArray(px.data.length / 4);
+      const hist = new Array(256).fill(0);
+      for (let i = 0, g = 0; i < px.data.length; i += 4, g++) {
+        const v = Math.round(
+          0.299 * px.data[i] + 0.587 * px.data[i + 1] + 0.114 * px.data[i + 2]
+        );
+        grey[g] = v;
+        hist[v]++;
+      }
+
+      const total = grey.length;
+      let sum = 0;
+      for (let t = 0; t < 256; t++) sum += t * hist[t];
+      let sumB = 0;
+      let wB = 0;
+      let best = 0;
+      let threshold = 128;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB === 0) continue;
+        const wF = total - wB;
+        if (wF === 0) break;
+        sumB += t * hist[t];
+        const mB = sumB / wB;
+        const mF = (sum - sumB) / wF;
+        const between = wB * wF * (mB - mF) * (mB - mF);
+        if (between > best) {
+          best = between;
+          threshold = t;
+        }
+      }
+
+      for (let i = 0, g = 0; i < px.data.length; i += 4, g++) {
+        const v = grey[g] > threshold ? 255 : 0;
         px.data[i] = px.data[i + 1] = px.data[i + 2] = v;
       }
       ctx.putImageData(px, 0, 0);
 
-      const { createWorker } = await import("tesseract.js");
+      const { createWorker, PSM } = await import("tesseract.js");
       const worker = await createWorker("eng", 1, {
         logger: (m: { status: string; progress: number }) => {
           if (m.status === "recognizing text") setProgress(Math.round(m.progress * 100));
         },
+      });
+      // Page segmentation 6: one uniform block of text. The default assumes a
+      // whole page with columns and headings, and shreds a single paragraph.
+      await worker.setParameters({
+        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+        preserve_interword_spaces: "1",
       });
       const { data } = await worker.recognize(canvas);
       await worker.terminate();
@@ -159,7 +200,7 @@ export default function QuoteCapture({
   }
 
   return (
-    <Sheet title="Capture A Line" onClose={onClose} full>
+    <Sheet title="Capture a Line" onClose={onClose} full>
       {phase === "capture" && (
         <label className="mt-2 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-tan py-14">
           <Camera size={30} className="text-green" />
@@ -254,7 +295,7 @@ export default function QuoteCapture({
               Back
             </OutlineButton>
             <SolidButton className="flex-1" onClick={save} disabled={!text.trim()}>
-              Save The Line
+              Save the Line
             </SolidButton>
           </div>
           <p className="text-[11.5px] text-muted">The photo is discarded when you save.</p>

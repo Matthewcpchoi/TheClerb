@@ -227,6 +227,18 @@ function BookScreenInner() {
           {book.completed_at && (
             <p className="mt-1 text-[12px] text-muted">Read {shortMonthYear(book.completed_at)}</p>
           )}
+          {currentMember?.is_admin && (
+            <button
+              onClick={async () => {
+                if (!confirm(`Remove "${book.title}" from the shelf?`)) return;
+                await supabase.from("books").delete().eq("id", bookId);
+                router.push("/shelf");
+              }}
+              className="mt-2 text-[11.5px] text-muted/70"
+            >
+              Remove from the shelf
+            </button>
+          )}
         </div>
       </div>
 

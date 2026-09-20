@@ -5,6 +5,7 @@ import { ArrowSquareOut, CaretRight } from "@phosphor-icons/react";
 import { supabase } from "@/lib/supabase";
 import { Attendance, Book, Meeting, MeetingOrder, Member } from "@/types";
 import { useMember } from "@/components/MemberProvider";
+import PotentialBooks from "@/components/PotentialBooks";
 import {
   DeleteButton,
   Kicker,
@@ -301,9 +302,16 @@ export default function MeetScreen() {
           <Kicker tone="green">Next Up</Kicker>
           <button
             onClick={() => setOpenMeeting(next.id)}
-            className="mt-[10px] flex w-full items-baseline gap-3 text-left"
+            className="mt-[10px] flex w-full items-center gap-3 text-left"
           >
-            <Num className="text-[40px] font-semibold leading-none text-ink">{d!.getDate()}</Num>
+            <div className="w-[52px] flex-none text-center">
+              <p className="kicker text-green">
+                {d!.toLocaleDateString("en-US", { month: "short" })}
+              </p>
+              <Num className="mt-[2px] block text-[38px] font-semibold leading-none text-ink">
+                {d!.getDate()}
+              </Num>
+            </div>
             <div className="min-w-0 flex-1">
               <p className="text-[17px] text-ink">
                 {d!.toLocaleDateString("en-US", { weekday: "long" })}, {formatClock(next.time)}
@@ -373,6 +381,14 @@ export default function MeetScreen() {
           )}
         </div>
       )}
+
+      <div className="-mx-5 mt-[26px]">
+        <Rule />
+      </div>
+
+      <section className="mt-5">
+        <PotentialBooks currentMember={currentMember} />
+      </section>
 
       <div className="-mx-5 mt-[26px]">
         <Rule />
@@ -516,7 +532,7 @@ function MeetingSheet({
             ["Going", buckets.going],
             ["Maybe", buckets.maybe],
             ["Can't", buckets.not_going],
-            ["Yet To Answer", buckets.silent],
+            ["Yet to Answer", buckets.silent],
           ] as const
         ).map(([label, list]) =>
           list.length ? (
@@ -579,7 +595,7 @@ function MeetingSheet({
           rel="noopener noreferrer"
           className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-ink py-[11px] text-[13px] font-medium text-ground"
         >
-          Join The Order
+          Join the Order
           <ArrowSquareOut size={14} />
         </a>
       ) : (
@@ -591,7 +607,7 @@ function MeetingSheet({
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 rounded-lg border border-green py-[10px] text-[13px] font-medium text-ink"
             >
-              Start It On Uber Eats
+              Start It on Uber Eats
               <ArrowSquareOut size={14} />
             </a>
             <div className="flex gap-2">
@@ -635,14 +651,24 @@ function MeetingRow({
   return (
     <button
       onClick={onOpen}
-      className={cn("flex w-full items-baseline gap-[14px] py-[14px] text-left", !last && "row-line")}
+      className={cn("flex w-full items-center gap-[14px] py-[14px] text-left", !last && "row-line")}
     >
-      <Num className={cn("w-[34px] text-[17px] font-semibold", dim ? "text-muted/70" : "text-muted")}>
-        {d.getDate()}
-      </Num>
+      <div className="w-[38px] flex-none text-center">
+        <p className={cn("kicker", dim ? "text-muted/70" : "text-green")}>
+          {d.toLocaleDateString("en-US", { month: "short" })}
+        </p>
+        <Num
+          className={cn(
+            "mt-[1px] block text-[19px] font-semibold leading-none",
+            dim ? "text-muted/70" : "text-ink"
+          )}
+        >
+          {d.getDate()}
+        </Num>
+      </div>
       <div className="min-w-0 flex-1">
         <p className={cn("truncate text-[14.5px]", dim ? "text-muted" : "text-ink")}>
-          {d.toLocaleDateString("en-US", { month: "short" })} · {meeting.title}
+          {meeting.title}
         </p>
         <p className="mt-[2px] truncate text-[12px] text-muted">{place || "No details yet"}</p>
       </div>

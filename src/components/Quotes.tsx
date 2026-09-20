@@ -63,7 +63,7 @@ export default function Quotes({
               onClick={() => setCapturing(true)}
             >
               <Camera size={15} />
-              Photograph A Line
+              Photograph a Line
             </OutlineButton>
             <OutlineButton onClick={() => setAdding(true)}>Type It</OutlineButton>
           </div>

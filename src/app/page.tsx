@@ -8,6 +8,7 @@ import { Attendance, Book, Meeting, Member, ProgressStatus, Rating } from "@/typ
 import { useMember } from "@/components/MemberProvider";
 import BookCover from "@/components/BookCover";
 import StatusPicker, { STATUS_LABEL } from "@/components/StatusPicker";
+import SectionRail from "@/components/SectionRail";
 import { Kicker, Num, OutlineButton, PillButton, Score } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -155,10 +156,14 @@ export default function ReadingScreen() {
   if (loading) return <div className="h-[300px] animate-pulse bg-tan/40" />;
 
   return (
-    <div className="pb-2">
+    <div className="pb-10">
       {book ? (
         <>
-          <Link href={`/book/${book.id}`} className="relative block h-[300px] overflow-hidden">
+          <Link
+            id="the-book"
+            href={`/book/${book.id}`}
+            className="relative block h-[300px] overflow-hidden"
+          >
             <BookCover book={book} className="h-full w-full" fit="cover" eager />
             <div
               className="absolute inset-0"
@@ -209,13 +214,13 @@ export default function ReadingScreen() {
             href="/calendar"
             className="mt-5 inline-block rounded-lg border border-green px-4 py-[9px] text-[13px] font-medium text-ink"
           >
-            {meeting ? "Set The Book" : "Schedule A Meeting"}
+            {meeting ? "Set the Book" : "Schedule a Meeting"}
           </Link>
         </div>
       )}
 
       {book && (
-        <section className="px-5 pt-6">
+        <section id="club-progress" className="scroll-mt-4 px-5 pt-6">
           <div className="flex items-center justify-between">
             <Kicker>Club Progress</Kicker>
             {othersScored > 0 && (
@@ -278,18 +283,24 @@ export default function ReadingScreen() {
 
       {/* The meeting, as its own card rather than a loose paragraph. */}
       {meeting && (
-        <section className="px-5 pt-7">
+        <section id="next-meeting" className="scroll-mt-4 px-5 pt-7">
           <Kicker>Next Meeting</Kicker>
           <div className="mt-2 rounded-xl border border-tan p-4">
-            <div className="flex items-baseline gap-3">
-              <Num className="text-[32px] font-semibold leading-none text-ink">
-                {new Date(`${meeting.date}T00:00:00`).getDate()}
-              </Num>
+            <div className="flex items-center gap-3">
+              <div className="w-[46px] flex-none text-center">
+                <p className="kicker text-green">
+                  {new Date(`${meeting.date}T00:00:00`).toLocaleDateString("en-US", {
+                    month: "short",
+                  })}
+                </p>
+                <Num className="mt-[2px] block text-[30px] font-semibold leading-none text-ink">
+                  {new Date(`${meeting.date}T00:00:00`).getDate()}
+                </Num>
+              </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[15.5px] text-ink">
                   {new Date(`${meeting.date}T00:00:00`).toLocaleDateString("en-US", {
                     weekday: "long",
-                    month: "short",
                   })}
                   , {formatClock(meeting.time)}
                 </p>
@@ -337,6 +348,16 @@ export default function ReadingScreen() {
             </div>
           </div>
         </section>
+      )}
+
+      {book && (
+        <SectionRail
+          sections={[
+            { id: "the-book", label: "Book" },
+            { id: "club-progress", label: "Progress" },
+            ...(meeting ? [{ id: "next-meeting", label: "Meeting" }] : []),
+          ]}
+        />
       )}
 
       {pickingStatus && currentMember && book && (

@@ -112,12 +112,35 @@ export interface Attendance {
   member?: Member;
 }
 
+export interface Nomination {
+  id: string;
+  title: string;
+  author: string | null;
+  cover_url: string | null;
+  isbn: string | null;
+  google_books_id: string | null;
+  synopsis: string | null;
+  genre: string | null;
+  added_by: string | null;
+  created_at: string;
+}
+
+export interface NominationReaction {
+  id: string;
+  nomination_id: string;
+  member_id: string;
+  has_read: boolean;
+  interested: boolean;
+  member?: Member;
+}
+
 export interface GoogleBooksResult {
   id: string;
   volumeInfo: {
     title: string;
     authors?: string[];
     description?: string;
+    categories?: string[];
     pageCount?: number;
     industryIdentifiers?: { type: string; identifier: string }[];
     imageLinks?: {

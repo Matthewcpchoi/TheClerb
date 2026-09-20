@@ -78,7 +78,7 @@ export default function DiscussionTopics({
         onAddTopic &&
         (!adding ? (
           <OutlineButton className="mt-3" onClick={() => setAdding(true)}>
-            Add A Question
+            Add a Question
           </OutlineButton>
         ) : (
           <div className="mt-3 space-y-2">

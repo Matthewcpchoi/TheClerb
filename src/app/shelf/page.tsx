@@ -15,8 +15,8 @@ import { extractSpineColor, isDerived, leather, scoreColor, shortMonthYear } fro
 import { cn } from "@/lib/utils";
 
 const SORTS = [
-  "Score · High To Low",
-  "Score · Low To High",
+  "Score · High to Low",
+  "Score · Low to High",
   "Title A–Z",
   "Recently Read",
 ] as const;
@@ -115,7 +115,7 @@ export default function ShelfScreen() {
   const sorted = useMemo(() => {
     const copy = shelf.slice();
     switch (sort) {
-      case "Score · Low To High":
+      case "Score · Low to High":
         return copy.sort((a, b) => (a.avg ?? 99) - (b.avg ?? 99));
       case "Title A–Z":
         return copy.sort((a, b) => a.title.localeCompare(b.title));
