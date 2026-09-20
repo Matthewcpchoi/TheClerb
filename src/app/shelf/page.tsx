@@ -2,16 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CaretRight } from "@phosphor-icons/react";
+import { CaretRight, CaretUpDown, SquaresFour } from "@phosphor-icons/react";
 import { supabase } from "@/lib/supabase";
-import { Book, Member } from "@/types";
+import { Book, Member, ProgressStatus } from "@/types";
 import { useMember } from "@/components/MemberProvider";
 import BookSearch from "@/components/BookSearch";
 import BookCover from "@/components/BookCover";
 import ShelfWheel from "@/components/ShelfWheel";
-import { Kicker, Num, OutlineButton, Rule, ScreenTitle } from "@/components/ui";
+import { Kicker, Num, OutlineButton, Rule, Score, ScreenTitle, Sheet } from "@/components/ui";
 import { markCompleted } from "@/lib/books";
-import { shortMonthYear, spineColor } from "@/lib/design";
+import { leather, scoreColor, shortMonthYear } from "@/lib/design";
+import { cn } from "@/lib/utils";
 
 const SORTS = [
   "Score · high to low",
@@ -23,8 +24,6 @@ type Sort = (typeof SORTS)[number];
 
 interface ShelfBook extends Book {
   avg: number | null;
-  scores: number;
-  notes: number;
 }
 
 export default function ShelfScreen() {
@@ -32,56 +31,49 @@ export default function ShelfScreen() {
   const { currentMember, members } = useMember();
   const [shelf, setShelf] = useState<ShelfBook[]>([]);
   const [upNext, setUpNext] = useState<Book[]>([]);
-  const [memberStats, setMemberStats] = useState<Record<string, { books: number; avg: number | null }>>({});
+  const [scores, setScores] = useState<Record<string, Record<string, number>>>({}); // member -> book -> score
+  const [progress, setProgress] = useState<Record<string, Record<string, ProgressStatus>>>({}); // member -> book -> status
   const [sort, setSort] = useState<Sort>(SORTS[0]);
   const [selected, setSelected] = useState(0);
+  const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [starting, setStarting] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [{ data: booksData }, { data: ratingsData }, commentsRes] = await Promise.all([
+    const [{ data: booksData }, { data: ratingsData }, { data: progressData }] = await Promise.all([
       supabase.from("books").select("*"),
       supabase.from("ratings").select("book_id, member_id, pre_rating, post_rating"),
-      supabase.from("book_comments").select("book_id"),
+      supabase.from("book_progress").select("book_id, member_id, status"),
     ]);
 
     const all = (booksData || []) as Book[];
-    const ratings = ratingsData || [];
-    const comments = commentsRes.error ? [] : commentsRes.data || [];
-
     const byBook = new Map<string, number[]>();
-    const byMember = new Map<string, number[]>();
-    for (const r of ratings) {
+    const byMember: Record<string, Record<string, number>> = {};
+
+    for (const r of ratingsData || []) {
       const v = r.post_rating ?? r.pre_rating;
       if (v === null) continue;
       byBook.set(r.book_id, [...(byBook.get(r.book_id) || []), v]);
-      byMember.set(r.member_id, [...(byMember.get(r.member_id) || []), v]);
+      (byMember[r.member_id] ||= {})[r.book_id] = v;
     }
-    const noteCount = new Map<string, number>();
-    for (const c of comments) noteCount.set(c.book_id, (noteCount.get(c.book_id) || 0) + 1);
-    const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
 
+    const byProgress: Record<string, Record<string, ProgressStatus>> = {};
+    for (const p of progressData || []) (byProgress[p.member_id] ||= {})[p.book_id] = p.status;
+
+    const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
     setShelf(
       all
         .filter((b) => b.status === "completed")
         .map((b) => {
           const vals = byBook.get(b.id) || [];
-          return {
-            ...b,
-            avg: vals.length ? mean(vals) : null,
-            scores: vals.length,
-            notes: noteCount.get(b.id) || 0,
-          };
+          return { ...b, avg: vals.length ? mean(vals) : null };
         })
     );
     setUpNext(all.filter((b) => b.status === "upcoming"));
-
-    const stats: Record<string, { books: number; avg: number | null }> = {};
-    byMember.forEach((vals, memberId) => {
-      stats[memberId] = { books: vals.length, avg: vals.length ? mean(vals) : null };
-    });
-    setMemberStats(stats);
+    setScores(byMember);
+    setProgress(byProgress);
     setLoading(false);
   }, []);
 
@@ -111,11 +103,20 @@ export default function ShelfScreen() {
 
   async function startReading(bookId: string) {
     setStarting(bookId);
-    const currentlyReading = [...shelf, ...upNext].find((b) => b.status === "reading");
-    if (currentlyReading) await markCompleted(currentlyReading.id);
+    const reading = [...shelf, ...upNext].find((b) => b.status === "reading");
+    if (reading) await markCompleted(reading.id);
     await supabase.from("books").update({ status: "reading" }).eq("id", bookId);
     setStarting(null);
     router.push("/");
+  }
+
+  /** How one member stands on the book currently in the frame. */
+  function standing(memberId: string, bookId: string) {
+    const score = scores[memberId]?.[bookId] ?? null;
+    const status = progress[memberId]?.[bookId] ?? (score !== null ? "finished" : "none");
+    const label =
+      status === "dnf" ? "DNF" : status === "finished" || score !== null ? "Read" : "Didn't read";
+    return { score, status, label };
   }
 
   return (
@@ -143,18 +144,25 @@ export default function ShelfScreen() {
           ))}
         </select>
         <span className="flex-1" />
+        <button
+          onClick={() => setShowAll(true)}
+          aria-label="See every book"
+          className="flex h-[32px] w-[32px] items-center justify-center rounded-lg border border-tan text-ink active:bg-tan/40"
+        >
+          <SquaresFour size={15} />
+        </button>
         {currentMember && (
           <OutlineButton className="px-3 py-[6px] text-[12px]" onClick={() => setShowSearch(true)}>
-            Add a book
+            Add
           </OutlineButton>
         )}
       </div>
 
       {loading ? (
-        <div className="mx-5 mt-[22px] h-[150px] animate-pulse rounded bg-tan/40" />
+        <div className="mx-5 mt-[22px] h-[156px] animate-pulse rounded bg-tan/40" />
       ) : sorted.length === 0 ? (
         <p className="px-5 pt-6 text-[13px] leading-relaxed text-muted">
-          No finished books yet. Books the club finishes land here, best first.
+          No finished books yet.
         </p>
       ) : (
         <div className="mt-[22px]">
@@ -162,7 +170,6 @@ export default function ShelfScreen() {
         </div>
       )}
 
-      {/* Caption — a row that reads as a way in, with what's waiting inside. */}
       {sel && (
         <button
           onClick={() => router.push(`/book/${sel.id}`)}
@@ -176,22 +183,12 @@ export default function ShelfScreen() {
               {sel.author}
               {shortMonthYear(sel.completed_at) ? ` · read ${shortMonthYear(sel.completed_at)}` : ""}
             </p>
-            <p className="mt-[7px] text-[11.5px] text-green">
-              <Num>{sel.scores}</Num> score{sel.scores === 1 ? "" : "s"}
-              {sel.notes > 0 && (
-                <>
-                  {" · "}
-                  <Num>{sel.notes}</Num> note{sel.notes === 1 ? "" : "s"}
-                </>
-              )}
-              {" · discussion"}
-            </p>
+            <p className="mt-[7px] text-[11.5px] text-green">Reviews, quotes &amp; discussion</p>
           </div>
           <CaretRight size={18} className="flex-none text-green" />
         </button>
       )}
 
-      {/* Where a just-added book goes, and how it becomes the current read. */}
       {upNext.length > 0 && (
         <section className="px-5 pt-5">
           <Kicker>Up next</Kicker>
@@ -199,15 +196,12 @@ export default function ShelfScreen() {
             {upNext.map((b) => (
               <div key={b.id} className="row-line flex items-center gap-3 py-[11px]">
                 <div
-                  className="h-[46px] w-[31px] flex-none overflow-hidden"
-                  style={{ borderRadius: "1px 3px 3px 1px", background: spineColor(b.title) }}
+                  className="h-[46px] w-[31px] flex-none overflow-hidden rounded-sm"
+                  style={{ background: leather(b.title).hex }}
                 >
                   <BookCover book={b} className="h-full w-full" fit="cover" />
                 </div>
-                <button
-                  onClick={() => router.push(`/book/${b.id}`)}
-                  className="min-w-0 flex-1 text-left"
-                >
+                <button onClick={() => router.push(`/book/${b.id}`)} className="min-w-0 flex-1 text-left">
                   <p className="truncate text-[14.5px] text-ink">{b.title}</p>
                   <p className="truncate text-[12px] text-muted">{b.author}</p>
                 </button>
@@ -230,32 +224,129 @@ export default function ShelfScreen() {
         <Rule />
       </div>
 
+      {/* Members, against whatever book is in the frame. */}
       <section className="px-5 pt-[18px]">
         <div className="flex items-baseline justify-between">
           <Kicker>Members</Kicker>
-          <span className="flex gap-[26px]">
-            <Kicker>Read</Kicker>
-            <Kicker>Avg</Kicker>
-          </span>
+          {sel && <span className="text-[11px] text-muted">on {sel.title}</span>}
         </div>
+
         <div className="mt-[10px]">
           {members.map((m: Member) => {
-            const s = memberStats[m.id];
+            const stand = sel ? standing(m.id, sel.id) : null;
+            const mine = scores[m.id] || {};
+            const all = Object.values(mine);
+            const avg = all.length ? all.reduce((a, b) => a + b, 0) / all.length : null;
+            const open = expandedMember === m.id;
+
             return (
-              <div key={m.id} className="row-line flex items-center py-[11px]">
-                <span className="text-[14.5px] text-ink">{m.name}</span>
-                <span className="flex-1" />
-                <Num className="w-[42px] text-right text-[14px] font-medium text-muted">
-                  {s?.books ?? 0}
-                </Num>
-                <Num className="w-[52px] text-right text-[14px] font-semibold text-ink">
-                  {s?.avg != null ? s.avg.toFixed(1) : "—"}
-                </Num>
+              <div key={m.id} className="row-line">
+                <button
+                  onClick={() => setExpandedMember(open ? null : m.id)}
+                  className="flex w-full items-center gap-3 py-[11px] text-left"
+                  aria-expanded={open}
+                >
+                  <span className="text-[14.5px] text-ink">{m.name}</span>
+                  <span className="flex-1" />
+                  {stand && (
+                    <span
+                      className={cn(
+                        "text-[11.5px]",
+                        stand.status === "dnf" ? "text-muted line-through" : "text-muted"
+                      )}
+                    >
+                      {stand.label}
+                    </span>
+                  )}
+                  <span className="w-[46px] text-right">
+                    {stand?.score != null ? (
+                      <Score value={stand.score} size={15} />
+                    ) : (
+                      <span className="text-[14px] text-muted/50">—</span>
+                    )}
+                  </span>
+                  <CaretUpDown size={13} className="flex-none text-muted/60" />
+                </button>
+
+                {open && (
+                  <div className="pop-in pb-3">
+                    <p className="pb-2 text-[11.5px] text-muted">
+                      <Num>{all.length}</Num> scored · average{" "}
+                      <Num style={undefined}>
+                        <span style={{ color: scoreColor(avg) }}>
+                          {avg !== null ? avg.toFixed(1) : "—"}
+                        </span>
+                      </Num>
+                    </p>
+                    <div className="scrollbar-hide max-h-[200px] overflow-y-auto overscroll-contain rounded-lg bg-tan/20 px-3">
+                      {shelf
+                        .filter((b) => mine[b.id] !== undefined)
+                        .sort((a, b) => mine[b.id] - mine[a.id])
+                        .map((b, i, arr) => (
+                          <button
+                            key={b.id}
+                            onClick={() => router.push(`/book/${b.id}`)}
+                            className={cn(
+                              "flex w-full items-center gap-3 py-[9px] text-left",
+                              i < arr.length - 1 && "row-line"
+                            )}
+                          >
+                            <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
+                              {b.title}
+                            </span>
+                            <Score value={mine[b.id]} size={14} />
+                          </button>
+                        ))}
+                      {all.length === 0 && (
+                        <p className="py-3 text-[12.5px] text-muted">Nothing scored yet.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </section>
+
+      {showAll && (
+        <Sheet title="Every book" onClose={() => setShowAll(false)} full>
+          <div className="grid grid-cols-3 gap-x-4 gap-y-5 pt-1">
+            {sorted.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => {
+                  setShowAll(false);
+                  router.push(`/book/${b.id}`);
+                }}
+                className="text-left"
+              >
+                <div
+                  className="relative aspect-[2/3] w-full overflow-hidden rounded-sm"
+                  style={{
+                    background: leather(b.title).hex,
+                    boxShadow: "0 6px 14px rgba(28,17,8,.22)",
+                  }}
+                >
+                  <BookCover book={b} className="h-full w-full" fit="cover" />
+                  <span
+                    className="num absolute bottom-1 right-1 rounded px-[5px] py-[2px] text-[11px] font-semibold"
+                    style={{ background: "#fff5e7", color: scoreColor(b.avg) }}
+                  >
+                    {b.avg !== null ? b.avg.toFixed(1) : "—"}
+                  </span>
+                </div>
+                <p className="mt-[6px] line-clamp-2 text-[11.5px] leading-tight text-ink">
+                  {b.title}
+                </p>
+              </button>
+            ))}
+          </div>
+          {sorted.length === 0 && (
+            <p className="py-6 text-[13px] text-muted">No finished books yet.</p>
+          )}
+        </Sheet>
+      )}
 
       {showSearch && currentMember && (
         <BookSearch

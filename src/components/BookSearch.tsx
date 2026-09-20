@@ -146,7 +146,7 @@ export default function BookSearch({
       >
         <div className="px-5 pb-3 pt-5">
           <div className="flex items-baseline justify-between">
-            <Kicker tone="green" wide>
+            <Kicker tone="green">
               Add a book
             </Kicker>
             <button onClick={onClose} className="text-[12px] text-muted">
@@ -204,7 +204,7 @@ export default function BookSearch({
                     {r.volumeInfo.authors?.join(", ")}
                   </p>
                 </div>
-                <span className="flex-none text-[11px] uppercase tracking-[0.1em] text-muted">
+                <span className="flex-none text-[11.5px] text-muted">
                   {busy ? step : already ? "On shelf" : "Add"}
                 </span>
               </button>
@@ -213,9 +213,6 @@ export default function BookSearch({
 
           {searched && !searching && results.length === 0 && (
             <p className="py-6 text-[12.5px] text-muted">Nothing found. Try the author&apos;s name.</p>
-          )}
-          {!searched && !searching && (
-            <p className="py-6 text-[12.5px] text-muted">Start typing to search every book in print.</p>
           )}
         </div>
       </div>

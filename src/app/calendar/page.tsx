@@ -1,10 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowSquareOut, CaretRight } from "@phosphor-icons/react";
 import { supabase } from "@/lib/supabase";
-import { Attendance, Book, Meeting, Member } from "@/types";
+import { Attendance, Book, Meeting, MeetingOrder, Member } from "@/types";
 import { useMember } from "@/components/MemberProvider";
-import { Kicker, Num, OutlineButton, Rule, ScreenTitle, SolidButton } from "@/components/ui";
+import {
+  DeleteButton,
+  Kicker,
+  Num,
+  OutlineButton,
+  Rule,
+  ScreenTitle,
+  Sheet,
+  SolidButton,
+} from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 type Rsvp = "going" | "maybe" | "not_going";
@@ -14,9 +24,6 @@ const RSVP_OPTIONS: { key: Rsvp; label: string }[] = [
   { key: "not_going", label: "Can't" },
 ];
 
-/** host_id is absent on rows created before migration 005; reads guard for it. */
-type MeetingRow = Meeting;
-
 const EMPTY = { book_id: "", host_id: "", location: "", date: "", time: "19:30", notes: "" };
 
 const field =
@@ -24,25 +31,33 @@ const field =
 
 export default function MeetScreen() {
   const { currentMember, members } = useMember();
-  const [meetings, setMeetings] = useState<MeetingRow[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [attendance, setAttendance] = useState<Record<string, Attendance[]>>({});
+  const [orders, setOrders] = useState<Record<string, MeetingOrder[]>>({});
   const [books, setBooks] = useState<Book[]>([]);
   const [form, setForm] = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
+  const [openMeeting, setOpenMeeting] = useState<string | null>(null);
+  const [expandGroup, setExpandGroup] = useState<Rsvp | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [{ data: m }, { data: a }, { data: b }] = await Promise.all([
+    const [{ data: m }, { data: a }, { data: b }, ordersRes] = await Promise.all([
       supabase.from("meetings").select("*").order("date").order("time"),
       supabase.from("attendance").select("*, member:members(*)"),
       supabase.from("books").select("*").order("created_at", { ascending: false }),
+      supabase.from("meeting_orders").select("*, member:members(*)"),
     ]);
-    setMeetings((m || []) as MeetingRow[]);
+    setMeetings((m || []) as Meeting[]);
     const grouped: Record<string, Attendance[]> = {};
     for (const row of a || []) (grouped[row.meeting_id] ||= []).push(row);
     setAttendance(grouped);
+    const byMeeting: Record<string, MeetingOrder[]> = {};
+    for (const row of ordersRes.error ? [] : ordersRes.data || [])
+      (byMeeting[row.meeting_id] ||= []).push(row as MeetingOrder);
+    setOrders(byMeeting);
     setBooks(b || []);
     setLoading(false);
   }, []);
@@ -53,8 +68,9 @@ export default function MeetScreen() {
 
   useEffect(() => {
     const ch = supabase
-      .channel("attendance-live")
+      .channel("meet-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "meeting_orders" }, () => load())
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
@@ -71,50 +87,40 @@ export default function MeetScreen() {
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const reading = books.find((b) => b.status === "reading") ?? null;
 
-  /** "Mara's · Parts Three & Four" */
-  function placeLine(m: MeetingRow): string {
-    const host = m.host_id ? memberById.get(m.host_id) : null;
-    const where = [host ? `${host.name}'s` : null, m.location].filter(Boolean).join(" · ");
-    return [where, m.notes].filter(Boolean).join(" · ");
+  const placeLine = useCallback(
+    (m: Meeting) => {
+      const host = m.host_id ? memberById.get(m.host_id) : null;
+      const where = [host ? `${host.name}'s` : null, m.location].filter(Boolean).join(" · ");
+      return [where, m.notes].filter(Boolean).join(" · ");
+    },
+    [memberById]
+  );
+
+  /** Who is in each bucket, plus anyone who hasn't answered. */
+  function buckets(meetingId: string) {
+    const rows = attendance[meetingId] || [];
+    const pick = (s: Rsvp) =>
+      rows.filter((r) => r.status === s).map((r) => r.member ?? memberById.get(r.member_id)!);
+    const answered = new Set(rows.map((r) => r.member_id));
+    return {
+      going: pick("going").filter(Boolean),
+      maybe: pick("maybe").filter(Boolean),
+      not_going: pick("not_going").filter(Boolean),
+      silent: members.filter((m) => !answered.has(m.id)),
+    };
   }
 
-  const myRsvp = next
-    ? (attendance[next.id] || []).find((a) => a.member_id === currentMember?.id)?.status
-    : undefined;
-
-  const summary = useMemo(() => {
-    if (!next) return "";
-    const rows = attendance[next.id] || [];
-    const going = rows.filter((r) => r.status === "going");
-    const cant = rows.filter((r) => r.status === "not_going");
-    const answered = new Set(rows.map((r) => r.member_id));
-    const silent = members.filter((m) => !answered.has(m.id));
-
-    const parts: string[] = [];
-    const meGoing = going.some((g) => g.member_id === currentMember?.id);
-    const others = going.length - (meGoing ? 1 : 0);
-    if (meGoing) parts.push(others > 0 ? `You + ${others} going` : "You're going");
-    else if (going.length) parts.push(`${going.length} going`);
-    if (cant.length)
-      parts.push(`${cant.map((c) => c.member?.name).filter(Boolean).join(", ")} can't`);
-    if (silent.length)
-      parts.push(
-        silent.length === 1 ? `${silent[0].name} hasn't said` : `${silent.length} haven't said`
-      );
-    return parts.join(" · ");
-  }, [next, attendance, members, currentMember]);
-
-  async function handleRsvp(status: Rsvp) {
-    if (!currentMember || !next) return;
+  async function handleRsvp(meetingId: string, status: Rsvp) {
+    if (!currentMember) return;
     setAttendance((prev) => {
-      const list = (prev[next.id] || []).filter((a) => a.member_id !== currentMember.id);
+      const list = (prev[meetingId] || []).filter((a) => a.member_id !== currentMember.id);
       return {
         ...prev,
-        [next.id]: [
+        [meetingId]: [
           ...list,
           {
-            id: `tmp-${next.id}`,
-            meeting_id: next.id,
+            id: `tmp-${meetingId}`,
+            meeting_id: meetingId,
             member_id: currentMember.id,
             status,
             member: currentMember,
@@ -125,16 +131,10 @@ export default function MeetScreen() {
     await supabase
       .from("attendance")
       .upsert(
-        { meeting_id: next.id, member_id: currentMember.id, status },
+        { meeting_id: meetingId, member_id: currentMember.id, status },
         { onConflict: "meeting_id,member_id" }
       );
     load();
-  }
-
-  function openForm() {
-    setForm({ ...EMPTY, book_id: reading?.id ?? "", date: "", time: "19:30" });
-    setError("");
-    setShowForm(true);
   }
 
   async function handleSave() {
@@ -144,7 +144,6 @@ export default function MeetScreen() {
     }
     setSaving(true);
     setError("");
-
     const book = form.book_id ? bookById.get(form.book_id) : null;
     const payload: Record<string, unknown> = {
       title: book ? book.title : "Book club",
@@ -155,18 +154,14 @@ export default function MeetScreen() {
       book_id: form.book_id || null,
       host_id: form.host_id || null,
     };
-
     let { error: err } = await supabase.from("meetings").insert(payload);
-    // host_id may not exist until its migration runs.
     if (err && err.message.includes("host_id")) {
       delete payload.host_id;
       ({ error: err } = await supabase.from("meetings").insert(payload));
     }
     setSaving(false);
-
     if (err) {
       setError("Couldn't save that. Try again.");
-      console.error("[supabase] create meeting:", err.message);
       return;
     }
     setShowForm(false);
@@ -177,17 +172,31 @@ export default function MeetScreen() {
   async function handleDelete(id: string) {
     await supabase.from("attendance").delete().eq("meeting_id", id);
     await supabase.from("meetings").delete().eq("id", id);
+    setOpenMeeting(null);
     load();
   }
 
   const d = next ? new Date(`${next.date}T00:00:00`) : null;
+  const nextBuckets = next ? buckets(next.id) : null;
+  const myRsvp = next
+    ? (attendance[next.id] || []).find((a) => a.member_id === currentMember?.id)?.status
+    : undefined;
+
+  const openMeetingRow = meetings.find((m) => m.id === openMeeting) ?? null;
 
   return (
     <div className="px-5 pt-[62px]">
       <div className="flex items-baseline justify-between">
         <ScreenTitle>Meetings</ScreenTitle>
         {currentMember && !showForm && (
-          <OutlineButton className="px-3 py-[6px] text-[12px]" onClick={openForm}>
+          <OutlineButton
+            className="px-3 py-[6px] text-[12px]"
+            onClick={() => {
+              setForm({ ...EMPTY, book_id: reading?.id ?? "" });
+              setError("");
+              setShowForm(true);
+            }}
+          >
             New meeting
           </OutlineButton>
         )}
@@ -197,42 +206,22 @@ export default function MeetScreen() {
         <div className="mt-5 space-y-3 rounded-lg border border-tan p-4">
           <Kicker tone="green">New meeting</Kicker>
 
-          <label className="block">
-            <span className="mb-[6px] block text-[11.5px] text-muted">Book</span>
+          <Labelled label="Book">
             <select
               value={form.book_id}
               onChange={(e) => setForm({ ...form, book_id: e.target.value })}
               className={`control ${field} pr-[30px]`}
             >
               <option value="">No book yet</option>
-              {reading && (
-                <optgroup label="Reading now">
-                  <option value={reading.id}>{reading.title}</option>
-                </optgroup>
-              )}
-              <optgroup label="Up next">
-                {books
-                  .filter((b) => b.status === "upcoming")
-                  .map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.title}
-                    </option>
-                  ))}
-              </optgroup>
-              <optgroup label="Finished">
-                {books
-                  .filter((b) => b.status === "completed")
-                  .map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.title}
-                    </option>
-                  ))}
-              </optgroup>
+              {books.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.title}
+                </option>
+              ))}
             </select>
-          </label>
+          </Labelled>
 
-          <label className="block">
-            <span className="mb-[6px] block text-[11.5px] text-muted">Who&apos;s hosting</span>
+          <Labelled label="Who's hosting">
             <select
               value={form.host_id}
               onChange={(e) => setForm({ ...form, host_id: e.target.value })}
@@ -245,48 +234,48 @@ export default function MeetScreen() {
                 </option>
               ))}
             </select>
-          </label>
+          </Labelled>
 
-          <label className="block">
-            <span className="mb-[6px] block text-[11.5px] text-muted">Where (optional)</span>
+          <Labelled label="Where">
             <input
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
               placeholder="The back room at Lila's"
               className={field}
             />
-          </label>
+          </Labelled>
 
           <div className="flex gap-3">
-            <label className="block flex-1">
-              <span className="mb-[6px] block text-[11.5px] text-muted">Date</span>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className={`num ${field}`}
-              />
-            </label>
-            <label className="block w-[120px]">
-              <span className="mb-[6px] block text-[11.5px] text-muted">Time</span>
-              <input
-                type="time"
-                value={form.time}
-                onChange={(e) => setForm({ ...form, time: e.target.value })}
-                className={`num ${field}`}
-              />
-            </label>
+            <div className="flex-1">
+              <Labelled label="Date">
+                <input
+                  type="date"
+                  value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  className={`num ${field}`}
+                />
+              </Labelled>
+            </div>
+            <div className="w-[122px]">
+              <Labelled label="Time">
+                <input
+                  type="time"
+                  value={form.time}
+                  onChange={(e) => setForm({ ...form, time: e.target.value })}
+                  className={`num ${field}`}
+                />
+              </Labelled>
+            </div>
           </div>
 
-          <label className="block">
-            <span className="mb-[6px] block text-[11.5px] text-muted">How far are we reading</span>
+          <Labelled label="How far are we reading">
             <input
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               placeholder="Parts Three &amp; Four"
               className={field}
             />
-          </label>
+          </Labelled>
 
           {error && <p className="text-[12px] text-muted">{error}</p>}
 
@@ -305,24 +294,24 @@ export default function MeetScreen() {
         <div className="mt-6 h-20 animate-pulse rounded bg-tan/40" />
       ) : !next ? (
         !showForm && (
-          <p className="mt-6 text-[13px] leading-relaxed text-muted">
-            Nothing on the calendar. Add a meeting and everyone can say if they&apos;re in.
-          </p>
+          <p className="mt-6 text-[13px] leading-relaxed text-muted">Nothing on the calendar.</p>
         )
       ) : (
         <div className="mt-6">
           <Kicker tone="green">Next up</Kicker>
-          <div className="mt-[10px] flex items-baseline gap-3">
+          <button
+            onClick={() => setOpenMeeting(next.id)}
+            className="mt-[10px] flex w-full items-baseline gap-3 text-left"
+          >
             <Num className="text-[40px] font-semibold leading-none text-ink">{d!.getDate()}</Num>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[17px] text-ink">
                 {d!.toLocaleDateString("en-US", { weekday: "long" })}, {formatClock(next.time)}
               </p>
-              <p className="mt-[3px] text-[12.5px] text-muted">
-                {placeLine(next) || next.title}
-              </p>
+              <p className="mt-[3px] text-[12.5px] text-muted">{placeLine(next) || next.title}</p>
             </div>
-          </div>
+            <CaretRight size={16} className="flex-none self-center text-green" />
+          </button>
 
           {currentMember && (
             <div className="mt-[18px] flex gap-2">
@@ -330,7 +319,7 @@ export default function MeetScreen() {
                 <OutlineButton
                   key={o.key}
                   selected={myRsvp === o.key}
-                  onClick={() => handleRsvp(o.key)}
+                  onClick={() => handleRsvp(next.id, o.key)}
                   className="flex-1 px-0 py-[10px] text-center"
                 >
                   {o.label}
@@ -339,7 +328,49 @@ export default function MeetScreen() {
             </div>
           )}
 
-          {summary && <p className="mt-[10px] text-[11.5px] text-muted">{summary}</p>}
+          {/* Counts you can open, rather than a sentence listing names. */}
+          {nextBuckets && (
+            <div className="mt-3">
+              <div className="flex gap-2">
+                {(
+                  [
+                    ["going", "Going", nextBuckets.going.length, "text-green"],
+                    ["maybe", "Maybe", nextBuckets.maybe.length, "text-muted"],
+                    ["not_going", "Can't", nextBuckets.not_going.length, "text-muted"],
+                  ] as const
+                ).map(([key, label, count, tone]) => (
+                  <button
+                    key={key}
+                    onClick={() => setExpandGroup(expandGroup === key ? null : (key as Rsvp))}
+                    className={cn(
+                      "flex flex-1 items-baseline justify-center gap-[5px] rounded-lg border py-[7px] text-[11.5px] transition-colors",
+                      expandGroup === key ? "border-green bg-green/10" : "border-tan"
+                    )}
+                  >
+                    <Num className={cn("text-[14px] font-semibold", tone)}>{count}</Num>
+                    <span className="text-muted">{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {expandGroup && (
+                <div className="pop-in mt-2 rounded-lg bg-tan/20 px-3 py-2">
+                  {(nextBuckets[expandGroup] as Member[]).length === 0 ? (
+                    <p className="py-1 text-[12.5px] text-muted">Nobody yet.</p>
+                  ) : (
+                    <p className="text-[13px] text-ink">
+                      {(nextBuckets[expandGroup] as Member[]).map((m) => m.name).join(", ")}
+                    </p>
+                  )}
+                  {nextBuckets.silent.length > 0 && (
+                    <p className="mt-1 text-[11.5px] text-muted">
+                      Yet to answer: {nextBuckets.silent.map((m) => m.name).join(", ")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -353,13 +384,12 @@ export default function MeetScreen() {
           <p className="py-4 text-[12.5px] text-muted">Nothing further out yet.</p>
         ) : (
           later.map((m, i) => (
-            <MeetingRowView
+            <MeetingRow
               key={m.id}
               meeting={m}
               place={placeLine(m)}
               last={i === later.length - 1}
-              canEdit={Boolean(currentMember)}
-              onDelete={() => handleDelete(m.id)}
+              onOpen={() => setOpenMeeting(m.id)}
             />
           ))
         )}
@@ -367,57 +397,266 @@ export default function MeetScreen() {
 
       {past.length > 0 && (
         <section className="mt-6">
-          <Kicker>Already met</Kicker>
-          {past.slice(0, 6).map((m, i) => (
-            <MeetingRowView
+          <Kicker>Past Clerbs</Kicker>
+          {past.map((m, i) => (
+            <MeetingRow
               key={m.id}
               meeting={m}
               place={placeLine(m)}
-              last={i === Math.min(past.length, 6) - 1}
-              canEdit={Boolean(currentMember)}
-              onDelete={() => handleDelete(m.id)}
+              last={i === past.length - 1}
+              onOpen={() => setOpenMeeting(m.id)}
               dim
             />
           ))}
         </section>
       )}
+
+      {openMeetingRow && (
+        <MeetingSheet
+          meeting={openMeetingRow}
+          place={placeLine(openMeetingRow)}
+          book={openMeetingRow.book_id ? bookById.get(openMeetingRow.book_id) ?? null : null}
+          buckets={buckets(openMeetingRow.id)}
+          orders={orders[openMeetingRow.id] || []}
+          currentMember={currentMember}
+          myRsvp={
+            (attendance[openMeetingRow.id] || []).find((a) => a.member_id === currentMember?.id)
+              ?.status
+          }
+          onRsvp={(s) => handleRsvp(openMeetingRow.id, s)}
+          onChanged={load}
+          onDelete={() => handleDelete(openMeetingRow.id)}
+          onClose={() => setOpenMeeting(null)}
+        />
+      )}
     </div>
   );
 }
 
-function MeetingRowView({
+/* --------------------------------------------------------------- details */
+
+function MeetingSheet({
+  meeting,
+  place,
+  book,
+  buckets,
+  orders,
+  currentMember,
+  myRsvp,
+  onRsvp,
+  onChanged,
+  onDelete,
+  onClose,
+}: {
+  meeting: Meeting;
+  place: string;
+  book: Book | null;
+  buckets: { going: Member[]; maybe: Member[]; not_going: Member[]; silent: Member[] };
+  orders: MeetingOrder[];
+  currentMember: Member | null;
+  myRsvp?: string;
+  onRsvp: (s: Rsvp) => void;
+  onChanged: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const [item, setItem] = useState(
+    orders.find((o) => o.member_id === currentMember?.id)?.item ?? ""
+  );
+  const [link, setLink] = useState(meeting.order_url ?? "");
+  const [savingLink, setSavingLink] = useState(false);
+  const d = new Date(`${meeting.date}T00:00:00`);
+  const mine = orders.find((o) => o.member_id === currentMember?.id);
+
+  async function saveItem() {
+    if (!currentMember || !item.trim()) return;
+    await supabase
+      .from("meeting_orders")
+      .upsert(
+        { meeting_id: meeting.id, member_id: currentMember.id, item: item.trim() },
+        { onConflict: "meeting_id,member_id" }
+      );
+    onChanged();
+  }
+
+  async function saveLink() {
+    setSavingLink(true);
+    await supabase.from("meetings").update({ order_url: link.trim() || null }).eq("id", meeting.id);
+    setSavingLink(false);
+    onChanged();
+  }
+
+  return (
+    <Sheet title={meeting.title} onClose={onClose}>
+      <p className="text-[13px] text-muted">
+        {d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} ·{" "}
+        {formatClock(meeting.time)}
+      </p>
+      {place && <p className="mt-1 text-[13px] text-ink">{place}</p>}
+      {book && <p className="mt-1 text-[12.5px] text-muted">Discussing {book.title}</p>}
+
+      {currentMember && (
+        <div className="mt-4 flex gap-2">
+          {RSVP_OPTIONS.map((o) => (
+            <OutlineButton
+              key={o.key}
+              selected={myRsvp === o.key}
+              onClick={() => onRsvp(o.key)}
+              className="flex-1 px-0 py-[9px] text-center"
+            >
+              {o.label}
+            </OutlineButton>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-5 space-y-2">
+        {(
+          [
+            ["Going", buckets.going],
+            ["Maybe", buckets.maybe],
+            ["Can't", buckets.not_going],
+            ["Yet to answer", buckets.silent],
+          ] as const
+        ).map(([label, list]) =>
+          list.length ? (
+            <div key={label} className="flex gap-3 text-[13px]">
+              <span className="w-[86px] flex-none text-muted">{label}</span>
+              <span className="min-w-0 flex-1 text-ink">{list.map((m) => m.name).join(", ")}</span>
+            </div>
+          ) : null
+        )}
+      </div>
+
+      <div className="my-5">
+        <Rule />
+      </div>
+
+      {/* Food. The app collects the order; the basket itself lives on Uber Eats. */}
+      <Kicker>Group order</Kicker>
+      <div className="mt-2">
+        {orders.length === 0 && <p className="py-2 text-[12.5px] text-muted">Nothing yet.</p>}
+        {orders.map((o, i) => (
+          <div
+            key={o.id}
+            className={cn("flex items-center gap-3 py-[9px]", i < orders.length - 1 && "row-line")}
+          >
+            <span className="w-[86px] flex-none text-[12.5px] text-muted">
+              {o.member?.name ?? "Someone"}
+            </span>
+            <span className="min-w-0 flex-1 text-[13.5px] text-ink">{o.item}</span>
+            {o.member_id === currentMember?.id && (
+              <DeleteButton
+                label="Remove your order"
+                onDelete={async () => {
+                  await supabase.from("meeting_orders").delete().eq("id", o.id);
+                  onChanged();
+                }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {currentMember && (
+        <div className="mt-3 flex gap-2">
+          <input
+            value={item}
+            onChange={(e) => setItem(e.target.value)}
+            placeholder="What do you want?"
+            className={`${field} flex-1`}
+          />
+          <SolidButton onClick={saveItem} disabled={!item.trim()}>
+            {mine ? "Update" : "Add"}
+          </SolidButton>
+        </div>
+      )}
+
+      {meeting.order_url ? (
+        <a
+          href={meeting.order_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-ink py-[11px] text-[13px] font-medium text-ground"
+        >
+          Join the order
+          <ArrowSquareOut size={14} />
+        </a>
+      ) : (
+        currentMember && (
+          <div className="mt-3 space-y-2">
+            <a
+              href="https://www.ubereats.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 rounded-lg border border-green py-[10px] text-[13px] font-medium text-ink"
+            >
+              Start it on Uber Eats
+              <ArrowSquareOut size={14} />
+            </a>
+            <div className="flex gap-2">
+              <input
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                placeholder="Paste the group order link"
+                className={`${field} flex-1`}
+              />
+              <SolidButton onClick={saveLink} disabled={savingLink || !link.trim()}>
+                Share
+              </SolidButton>
+            </div>
+          </div>
+        )
+      )}
+
+      {currentMember && (
+        <button onClick={onDelete} className="mt-6 w-full py-2 text-[12px] text-muted/70">
+          Delete this meeting
+        </button>
+      )}
+    </Sheet>
+  );
+}
+
+function MeetingRow({
   meeting,
   place,
   last,
-  canEdit,
-  onDelete,
+  onOpen,
   dim = false,
 }: {
-  meeting: MeetingRow;
+  meeting: Meeting;
   place: string;
   last: boolean;
-  canEdit: boolean;
-  onDelete: () => void;
+  onOpen: () => void;
   dim?: boolean;
 }) {
   const d = new Date(`${meeting.date}T00:00:00`);
   return (
-    <div className={cn("flex items-baseline gap-[14px] py-[14px]", !last && "row-line")}>
+    <button
+      onClick={onOpen}
+      className={cn("flex w-full items-baseline gap-[14px] py-[14px] text-left", !last && "row-line")}
+    >
       <Num className={cn("w-[34px] text-[17px] font-semibold", dim ? "text-muted/70" : "text-muted")}>
         {d.getDate()}
       </Num>
       <div className="min-w-0 flex-1">
-        <p className={cn("text-[14.5px]", dim ? "text-muted" : "text-ink")}>
+        <p className={cn("truncate text-[14.5px]", dim ? "text-muted" : "text-ink")}>
           {d.toLocaleDateString("en-US", { month: "short" })} · {meeting.title}
         </p>
-        <p className="mt-[2px] text-[12px] text-muted">{place || "No details yet"}</p>
+        <p className="mt-[2px] truncate text-[12px] text-muted">{place || "No details yet"}</p>
       </div>
-      {canEdit && (
-        <button onClick={onDelete} className="flex-none text-[11px] text-muted/70">
-          Remove
-        </button>
-      )}
-    </div>
+      <CaretRight size={14} className="flex-none self-center text-muted/50" />
+    </button>
+  );
+}
+
+function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-[6px] block text-[11.5px] text-muted">{label}</span>
+      {children}
+    </label>
   );
 }
 

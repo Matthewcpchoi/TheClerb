@@ -1,22 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Book } from "@/types";
 import BookCover from "./BookCover";
 import { Num } from "./ui";
-import { isDarkSpine, spineColor, spineHeight, spineTextColor, spineWidth } from "@/lib/design";
+import { leather, scoreColor, spineHeight, spineWidth } from "@/lib/design";
 import { cn } from "@/lib/utils";
 
 /**
  * The shelf reads like the number wheel on a clock app: the cover frame is
  * fixed and the books travel behind it. Whichever book comes to rest under
- * the frame is the selected one, and its cover fills the frame — so scrolling
- * back through what the club has read never moves the thing you are looking at.
+ * the frame is selected and fills it, so scrolling back through what the club
+ * has read never moves the thing you are looking at.
  */
 
-const FRAME_W = 96;
-const FRAME_H = 158;
-const SCORE_ROW = 22; // score line below the shelf, matching the design
+const FRAME_W = 104;
+const FRAME_H = 156;
+const SCORE_ROW = 22;
 const SHELF_LINE = 3;
 const HEIGHT = FRAME_H + SCORE_ROW;
 
@@ -33,6 +33,19 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
+  // Half the viewport in real pixels, so the first and last book can both
+  // reach the centre. A percentage here left the last few unreachable.
+  const [pad, setPad] = useState(0);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => setPad(el.clientWidth / 2);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const centerOn = useCallback((index: number, behavior: ScrollBehavior) => {
     const el = scroller.current;
     const item = items.current[index];
@@ -43,7 +56,6 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
     });
   }, []);
 
-  /** Whichever spine is nearest the frame wins. */
   const handleScroll = useCallback(() => {
     if (raf.current !== null) return;
     raf.current = requestAnimationFrame(() => {
@@ -65,11 +77,10 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
     });
   }, [onSelect]);
 
-  // Re-centre when the list itself changes (a new sort order, say).
   useEffect(() => {
-    centerOn(selectedRef.current, "auto");
+    if (pad > 0) centerOn(selectedRef.current, "auto");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [books.length, centerOn]);
+  }, [books.length, pad, centerOn]);
 
   useEffect(
     () => () => {
@@ -82,28 +93,29 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
 
   return (
     <div className="relative select-none" style={{ height: HEIGHT }}>
-      {/* The shelf the books stand on — fixed, like the frame. */}
       <div
         className="pointer-events-none absolute inset-x-5 rounded-sm bg-tan"
         style={{ bottom: SCORE_ROW - SHELF_LINE, height: SHELF_LINE }}
       />
 
-      {/* Books travel behind the frame. Edges fade so the row reads as a wheel. */}
       <div
         ref={scroller}
         onScroll={handleScroll}
-        className="scrollbar-hide absolute inset-0 overflow-x-auto overflow-y-hidden"
+        className="scrollbar-hide absolute inset-0 overflow-x-auto overflow-y-hidden overscroll-x-contain"
         style={{
           scrollSnapType: "x mandatory",
           WebkitMaskImage:
-            "linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent)",
+            "linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent)",
           maskImage:
-            "linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent)",
+            "linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent)",
         }}
       >
-        <div className="flex h-full items-end gap-[6px]" style={{ padding: "0 50%" }}>
+        <div
+          className="flex h-full items-end gap-[5px]"
+          style={{ paddingLeft: pad, paddingRight: pad }}
+        >
           {books.map((b, i) => {
-            const color = spineColor(b.title);
+            const skin = leather(b.title);
             const w = spineWidth(b.title);
             const h = spineHeight(b.title);
             const isSelected = i === selected;
@@ -118,17 +130,16 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
               >
                 <button
                   onClick={() => centerOn(i, "smooth")}
-                  className="spine-title flex-none px-0 py-[9px] transition-opacity duration-200"
+                  className="spine spine-title flex-none px-0 py-[10px] transition-opacity duration-200"
                   style={{
                     width: w,
                     height: h,
                     borderRadius: "1px 3px 3px 1px",
-                    background: color,
-                    color: spineTextColor(color),
-                    fontSize: w > 26 ? 10.5 : 9.5,
-                    letterSpacing: ".02em",
-                    // The selected book is shown in the frame instead, so its
-                    // spine steps aside rather than peeking out behind.
+                    backgroundColor: skin.hex,
+                    color: skin.text,
+                    fontSize: w > 30 ? 11 : 10,
+                    letterSpacing: ".01em",
+                    // Its cover is in the frame, so the spine steps aside.
                     opacity: isSelected ? 0 : 1,
                   }}
                   aria-label={b.title}
@@ -138,12 +149,17 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
                 </button>
                 <div style={{ height: SHELF_LINE }} />
                 <Num
-                  className={cn(
-                    "text-[11px] leading-[19px] transition-colors",
-                    isSelected ? "font-semibold text-ink" : "font-medium text-muted"
-                  )}
+                  className="text-[11px] leading-[19px] transition-all"
+                  style={undefined}
                 >
-                  {b.avg !== null ? b.avg.toFixed(1) : "—"}
+                  <span
+                    style={{
+                      color: isSelected ? scoreColor(b.avg) : "#3d6a58",
+                      fontWeight: isSelected ? 600 : 500,
+                    }}
+                  >
+                    {b.avg !== null ? b.avg.toFixed(1) : "—"}
+                  </span>
                 </Num>
               </div>
             );
@@ -151,29 +167,29 @@ export default function ShelfWheel({ books, selected, onSelect }: ShelfWheelProp
         </div>
       </div>
 
-      {/* The frame. Fixed in place; only its contents change. */}
+      {/* The frame. Fixed, facing straight on; only its contents change. */}
       {current && (
         <div
-          className="cover-lift pointer-events-none absolute z-10 overflow-hidden"
+          className="pointer-events-none absolute z-10 overflow-hidden"
           style={{
             width: FRAME_W,
             height: FRAME_H,
             left: "50%",
             bottom: SCORE_ROW,
-            borderRadius: "2px 5px 5px 2px",
-            background: spineColor(current.title),
-            transform: "translateX(-50%) perspective(600px) rotateY(-26deg)",
-            transformOrigin: "left center",
+            transform: "translateX(-50%)",
+            borderRadius: "2px 4px 4px 2px",
+            background: leather(current.title).hex,
+            boxShadow:
+              "0 14px 26px rgba(28,17,8,.34), 0 2px 5px rgba(28,17,8,.22), inset 0 0 0 1px rgba(0,0,0,.18)",
           }}
         >
           <BookCover book={current} className="h-full w-full" fit="cover" eager />
           <span
-            className="num absolute bottom-[7px] right-[7px] rounded-md px-[7px] py-[3px] text-[13px] font-semibold text-ink"
-            style={{ background: "#fff5e7" }}
+            className={cn("num absolute bottom-[7px] right-[7px] rounded-md px-[7px] py-[3px] text-[13px] font-semibold")}
+            style={{ background: "#fff5e7", color: scoreColor(current.avg) }}
           >
             {current.avg !== null ? current.avg.toFixed(1) : "—"}
           </span>
-          {isDarkSpine(spineColor(current.title)) && null}
         </div>
       )}
     </div>

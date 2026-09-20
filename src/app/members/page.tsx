@@ -1,73 +1,117 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowUUpLeft } from "@phosphor-icons/react";
 import { supabase } from "@/lib/supabase";
-import { Book } from "@/types";
+import { Book, Member } from "@/types";
 import { useMember } from "@/components/MemberProvider";
-import { Initials, Kicker, Num, OutlineButton, Rule, SolidButton } from "@/components/ui";
+import { Initials, Kicker, Num, OutlineButton, Rule, Score, SolidButton } from "@/components/ui";
+import { getExactPageCount } from "@/lib/utils";
+import { leather, scoreColor } from "@/lib/design";
+import BookCover from "@/components/BookCover";
 import { cn } from "@/lib/utils";
 
-interface Stats {
-  read: number;
-  avg: number | null;
-  attended: number;
-  highest: { book: Book; score: number }[];
+const SORTS = [
+  "Score · high to low",
+  "Score · low to high",
+  "Title A–Z",
+  "Recently read",
+] as const;
+type Sort = (typeof SORTS)[number];
+
+interface Scored {
+  book: Book;
+  score: number;
 }
 
 export default function ClubScreen() {
+  const router = useRouter();
   const { currentMember, setCurrentMember, members, refreshMembers } = useMember();
-  const [stats, setStats] = useState<Stats | null>(null);
+
+  // Whose profile is on screen. Defaults to you, but any member can be opened.
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [scores, setScores] = useState<Record<string, number>>({});
+  const [attended, setAttended] = useState(0);
+  const [sort, setSort] = useState<Sort>(SORTS[0]);
   const [newName, setNewName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState("");
 
+  const viewing = useMemo(
+    () => members.find((m) => m.id === viewingId) ?? currentMember,
+    [members, viewingId, currentMember]
+  );
+  const isSelf = viewing?.id === currentMember?.id;
+
   const load = useCallback(async () => {
-    if (!currentMember) return;
-    const [{ data: ratings }, { data: books }, { count: attended }] = await Promise.all([
+    if (!viewing) return;
+    const [{ data: booksData }, { data: ratings }, { count }] = await Promise.all([
+      supabase.from("books").select("*"),
       supabase
         .from("ratings")
         .select("book_id, pre_rating, post_rating")
-        .eq("member_id", currentMember.id),
-      supabase.from("books").select("*"),
+        .eq("member_id", viewing.id),
       supabase
         .from("attendance")
         .select("*", { count: "exact", head: true })
-        .eq("member_id", currentMember.id)
+        .eq("member_id", viewing.id)
         .eq("status", "going"),
     ]);
 
-    const bookById = new Map((books || []).map((b) => [b.id, b as Book]));
-    const scored = (ratings || [])
-      .map((r) => ({ book_id: r.book_id, score: r.post_rating ?? r.pre_rating }))
-      .filter((r): r is { book_id: string; score: number } => r.score !== null);
-
-    const highest = scored
-      .slice()
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3)
-      .map((r) => ({ book: bookById.get(r.book_id)!, score: r.score }))
-      .filter((r) => r.book);
-
-    setStats({
-      read: scored.length,
-      avg: scored.length ? scored.reduce((a, b) => a + b.score, 0) / scored.length : null,
-      attended: attended || 0,
-      highest,
-    });
-  }, [currentMember]);
+    setBooks((booksData || []) as Book[]);
+    const map: Record<string, number> = {};
+    for (const r of ratings || []) {
+      const v = r.post_rating ?? r.pre_rating;
+      if (v !== null) map[r.book_id] = v;
+    }
+    setScores(map);
+    setAttended(count || 0);
+  }, [viewing]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  /** Earliest-joined member gets the founding label. */
+  const scored: Scored[] = useMemo(
+    () =>
+      books
+        .filter((b) => scores[b.id] !== undefined)
+        .map((book) => ({ book, score: scores[book.id] })),
+    [books, scores]
+  );
+
+  const sortedBooks = useMemo(() => {
+    const copy = scored.slice();
+    switch (sort) {
+      case "Score · low to high":
+        return copy.sort((a, b) => a.score - b.score);
+      case "Title A–Z":
+        return copy.sort((a, b) => a.book.title.localeCompare(b.book.title));
+      case "Recently read":
+        return copy.sort(
+          (a, b) =>
+            new Date(b.book.completed_at ?? b.book.created_at).getTime() -
+            new Date(a.book.completed_at ?? a.book.created_at).getTime()
+        );
+      default:
+        return copy.sort((a, b) => b.score - a.score);
+    }
+  }, [scored, sort]);
+
+  const average = scored.length
+    ? scored.reduce((a, b) => a + b.score, 0) / scored.length
+    : null;
+  const pagesRead = scored.reduce((sum, s) => sum + (getExactPageCount(s.book) ?? 0), 0);
+
   const isFounding = useMemo(() => {
-    if (!currentMember || members.length === 0) return false;
+    if (!viewing || members.length === 0) return false;
     const earliest = members
       .slice()
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-    return earliest?.id === currentMember.id;
-  }, [currentMember, members]);
+    return earliest?.id === viewing.id;
+  }, [viewing, members]);
 
   async function handleAdd() {
     if (!newName.trim()) return;
@@ -88,11 +132,11 @@ export default function ClubScreen() {
     }
   }
 
-  if (!currentMember) {
-    return <div className="px-5 pt-[62px] text-[13px] text-muted">Pick who you are to see your profile.</div>;
+  if (!viewing) {
+    return <div className="px-5 pt-[62px] text-[13px] text-muted">Pick who you are first.</div>;
   }
 
-  const joined = new Date(currentMember.created_at).toLocaleDateString("en-US", {
+  const joined = new Date(viewing.created_at).toLocaleDateString("en-US", {
     month: "short",
     year: "numeric",
   });
@@ -100,25 +144,36 @@ export default function ClubScreen() {
   return (
     <div className="pt-[62px]">
       <div className="px-5">
+        {!isSelf && (
+          <button
+            onClick={() => setViewingId(null)}
+            className="mb-4 flex items-center gap-[6px] text-[12.5px] text-green"
+          >
+            <ArrowUUpLeft size={14} />
+            Back to your profile
+          </button>
+        )}
+
         <div className="flex items-center gap-[14px]">
-          <Initials name={currentMember.name} size={56} />
+          <Initials name={viewing.name} size={56} />
           <div className="min-w-0">
-            <p className="text-[22px] font-medium tracking-[-0.015em] text-ink">
-              {currentMember.name}
-            </p>
+            <p className="text-[22px] font-medium tracking-[-0.015em] text-ink">{viewing.name}</p>
             <p className="mt-[3px] text-[12.5px] text-muted">
               {isFounding ? "Founding member" : "Member"} · joined {joined}
             </p>
           </div>
         </div>
 
-        <div className="mt-[22px] flex gap-7">
-          <Stat label="Read" value={stats ? String(stats.read) : "—"} />
+        {/* Numbers centred over their labels. */}
+        <div className="mt-[22px] grid grid-cols-4 gap-2">
+          <Stat label="Read" value={String(scored.length)} />
           <Stat
-            label="Your average"
-            value={stats?.avg != null ? stats.avg.toFixed(1) : "—"}
+            label="Average"
+            value={average !== null ? average.toFixed(1) : "—"}
+            color={scoreColor(average)}
           />
-          <Stat label="Attended" value={stats ? String(stats.attended) : "—"} />
+          <Stat label="Attended" value={String(attended)} />
+          <Stat label="Pages" value={pagesRead ? pagesRead.toLocaleString() : "—"} />
         </div>
       </div>
 
@@ -127,30 +182,48 @@ export default function ClubScreen() {
       </div>
 
       <section className="px-5 pt-5">
-        <Kicker>Your highest</Kicker>
-        {!stats || stats.highest.length === 0 ? (
-          <p className="py-4 text-[12.5px] text-muted">
-            Nothing rated yet. Scores you give show up here.
-          </p>
+        <div className="flex items-center justify-between">
+          <Kicker>{isSelf ? "Your books" : `${viewing.name.split(" ")[0]}'s books`}</Kicker>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
+            className="control rounded-lg border border-tan bg-transparent py-[5px] pl-[9px] pr-[26px] text-[11px] font-medium text-ink outline-none"
+          >
+            {SORTS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {sortedBooks.length === 0 ? (
+          <p className="py-4 text-[12.5px] text-muted">Nothing scored yet.</p>
         ) : (
-          stats.highest.map((h, i) => (
-            <div
-              key={h.book.id}
-              className={cn(
-                "flex items-center justify-between py-3",
-                i < stats.highest.length - 1 && "row-line"
-              )}
-            >
-              <span className={cn("text-[14px]", i === 2 ? "text-muted" : "text-ink")}>
-                {h.book.title}
-              </span>
-              <Num
-                className={cn("text-[16px] font-semibold", i === 2 ? "text-muted" : "text-green")}
+          <div className="mt-2">
+            {sortedBooks.map(({ book, score }, i) => (
+              <button
+                key={book.id}
+                onClick={() => router.push(`/book/${book.id}`)}
+                className={cn(
+                  "flex w-full items-center gap-3 py-[10px] text-left",
+                  i < sortedBooks.length - 1 && "row-line"
+                )}
               >
-                {h.score.toFixed(1)}
-              </Num>
-            </div>
-          ))
+                <div
+                  className="h-[40px] w-[27px] flex-none overflow-hidden rounded-sm"
+                  style={{ background: leather(book.title).hex }}
+                >
+                  <BookCover book={book} className="h-full w-full" fit="cover" />
+                </div>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] text-ink">{book.title}</span>
+                  <span className="block truncate text-[11.5px] text-muted">{book.author}</span>
+                </span>
+                <Score value={score} size={16} />
+              </button>
+            ))}
+          </div>
         )}
       </section>
 
@@ -158,24 +231,41 @@ export default function ClubScreen() {
         <Rule />
       </div>
 
-      {/* Switching members is not in the design — the club needs it on a shared device. */}
       <section className="px-5 pt-5">
         <Kicker>The club</Kicker>
         <div className="mt-3 flex flex-wrap gap-[10px]">
-          {members
-            .filter((m) => m.id !== currentMember.id)
-            .map((m) => (
+          {members.map((m: Member) => {
+            const active = m.id === viewing.id;
+            return (
               <button
                 key={m.id}
-                onClick={() => setCurrentMember(m)}
-                className="rounded-full border border-tan px-[13px] py-[6px] text-[12.5px] text-muted active:bg-tan/30"
+                onClick={() => setViewingId(m.id)}
+                className={cn(
+                  "rounded-full border px-[13px] py-[6px] text-[12.5px] transition-colors",
+                  active
+                    ? "border-green bg-green text-ground"
+                    : "border-tan text-muted active:bg-tan/40"
+                )}
               >
                 {m.name}
               </button>
-            ))}
+            );
+          })}
         </div>
 
-        <div className="mt-4">
+        {viewing.id !== currentMember?.id && (
+          <OutlineButton
+            className="mt-4 w-full"
+            onClick={() => {
+              setCurrentMember(viewing);
+              setViewingId(null);
+            }}
+          >
+            Switch to {viewing.name.split(" ")[0]}
+          </OutlineButton>
+        )}
+
+        <div className="mt-3">
           {!isAdding ? (
             <OutlineButton onClick={() => setIsAdding(true)}>Add a member</OutlineButton>
           ) : (
@@ -205,11 +295,13 @@ export default function ClubScreen() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div>
-      <Num className="text-[22px] font-semibold text-ink">{value}</Num>
-      <p className="mt-[5px] text-[10px] uppercase tracking-[0.12em] text-muted">{label}</p>
+    <div className="text-center">
+      <Num className="block text-[21px] font-semibold leading-none" style={undefined}>
+        <span style={{ color: color ?? "#0e5f49" }}>{value}</span>
+      </Num>
+      <p className="mt-[6px] text-[10.5px] text-muted">{label}</p>
     </div>
   );
 }

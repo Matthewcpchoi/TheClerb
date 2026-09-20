@@ -2,23 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { CaretUpDown, PencilSimple, ArrowsLeftRight } from "@phosphor-icons/react";
 import { supabase } from "@/lib/supabase";
 import { Book, Meeting, Member, ProgressStatus, Rating } from "@/types";
 import { useMember } from "@/components/MemberProvider";
 import BookCover from "@/components/BookCover";
-import { CaretUpDown, PencilSimple } from "@phosphor-icons/react";
-import { Kicker, Num, PillButton } from "@/components/ui";
+import BookSearch from "@/components/BookSearch";
+import StatusPicker, { STATUS_LABEL } from "@/components/StatusPicker";
+import { Kicker, Num, OutlineButton, PillButton, Score, Sheet } from "@/components/ui";
+import { markCompleted } from "@/lib/books";
+import { spineColor } from "@/lib/design";
 import { cn } from "@/lib/utils";
 
-/** Ledger order: finished first (by score), then reading, not started, DNF. */
+/** Ledger order: done first (by score), then in progress, not started, gave up. */
 const GROUP: Record<ProgressStatus, number> = { finished: 0, reading: 1, none: 2, dnf: 3 };
-const CYCLE: ProgressStatus[] = ["none", "reading", "finished", "dnf"];
-
-const STATUS_LABEL: Record<Exclude<ProgressStatus, "finished">, string> = {
-  reading: "In progress",
-  none: "Not started",
-  dnf: "Gave up",
-};
 
 interface LedgerRow {
   member: Member;
@@ -31,22 +28,24 @@ interface LedgerRow {
 export default function ReadingScreen() {
   const { currentMember, members } = useMember();
   const [book, setBook] = useState<Book | null>(null);
+  const [upNext, setUpNext] = useState<Book[]>([]);
   const [progress, setProgress] = useState<Record<string, ProgressStatus>>({});
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [goingCount, setGoingCount] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const [pickingStatus, setPickingStatus] = useState(false);
+  const [swapping, setSwapping] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const { data: reading } = await supabase
-      .from("books")
-      .select("*")
-      .eq("status", "reading")
-      .limit(1)
-      .maybeSingle();
+    const { data: books } = await supabase.from("books").select("*");
+    const all = (books || []) as Book[];
+    const reading = all.find((b) => b.status === "reading") ?? null;
 
-    setBook(reading ?? null);
+    setBook(reading);
+    setUpNext(all.filter((b) => b.status === "upcoming"));
 
     if (reading) {
       const [{ data: prog }, { data: rats }] = await Promise.all([
@@ -58,6 +57,9 @@ export default function ReadingScreen() {
       setProgress(map);
       setRatings(rats || []);
       setRevealed(localStorage.getItem(`reveal-${reading.id}`) === "true");
+    } else {
+      setProgress({});
+      setRatings([]);
     }
 
     const today = new Date().toISOString().split("T")[0];
@@ -86,11 +88,21 @@ export default function ReadingScreen() {
     load();
   }, [load]);
 
+  // Coming back to this tab after changing the book elsewhere should show it.
+  useEffect(() => {
+    const refresh = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [load]);
+
   const rows = useMemo<LedgerRow[]>(() => {
     const scoreFor = (memberId: string) => {
       const r = ratings.find((x) => x.member_id === memberId);
-      if (!r) return null;
-      return r.post_rating ?? r.pre_rating;
+      return r ? r.post_rating ?? r.pre_rating : null;
     };
     return members
       .map((member) => {
@@ -104,10 +116,7 @@ export default function ReadingScreen() {
           isMe: member.id === currentMember?.id,
         };
       })
-      .sort(
-        (a, b) =>
-          GROUP[a.status] - GROUP[b.status] || (b.score ?? -1) - (a.score ?? -1)
-      );
+      .sort((a, b) => GROUP[a.status] - GROUP[b.status] || (b.score ?? -1) - (a.score ?? -1));
   }, [members, progress, ratings, currentMember]);
 
   function toggleReveal() {
@@ -117,108 +126,111 @@ export default function ReadingScreen() {
     localStorage.setItem(`reveal-${book.id}`, String(next));
   }
 
-  /** Tapping your own name moves you along: none → reading → finished → DNF. */
-  async function cycleOwnStatus() {
+  async function setStatus(status: ProgressStatus) {
     if (!currentMember || !book) return;
-    const current = progress[currentMember.id] ?? "none";
-    const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
-    setProgress((p) => ({ ...p, [currentMember.id]: next }));
+    setProgress((p) => ({ ...p, [currentMember.id]: status }));
     await supabase.from("book_progress").upsert(
       {
         book_id: book.id,
         member_id: currentMember.id,
-        status: next,
+        status,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "book_id,member_id" }
     );
   }
 
-  if (loading) {
-    return (
-      <div className="h-[300px] animate-pulse bg-tan/40" />
-    );
+  async function startReading(bookId: string) {
+    if (book) await markCompleted(book.id);
+    await supabase.from("books").update({ status: "reading" }).eq("id", bookId);
+    setSwapping(false);
+    setLoading(true);
+    await load();
   }
 
-  if (!book) {
-    return (
-      <div className="px-5 pt-[62px]">
-        <Kicker tone="green" wide>
-          Reading now
-        </Kicker>
-        <p className="mt-3 text-[34px] font-medium leading-[1.05] tracking-[-0.025em] text-ink">
-          Nothing on
-          <br />
-          the go
-        </p>
-        <p className="mt-3 text-[13.5px] text-muted">
-          Pick the next one from the shelf.
-        </p>
-        <Link
-          href="/shelf"
-          className="mt-5 inline-block rounded-lg border border-green px-4 py-[9px] text-[13px] font-medium text-ink"
-        >
-          Go to the shelf
-        </Link>
-      </div>
-    );
-  }
+  const myStatus = currentMember ? progress[currentMember.id] ?? "none" : "none";
+  const othersScored = rows.filter((r) => r.scored && !r.isMe).length;
 
-  const revealCount = rows.filter((r) => r.scored && !r.isMe).length;
+  if (loading) return <div className="h-[300px] animate-pulse bg-tan/40" />;
 
   return (
     <div>
-      {/* Cover header, full bleed under the status bar */}
-      <Link href={`/book/${book.id}`} className="relative block h-[300px] overflow-hidden">
-        <BookCover book={book} className="h-full w-full" fit="cover" eager />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg,rgba(255,245,231,.06) 0%,rgba(255,245,231,0) 30%,rgba(255,245,231,.82) 78%,#fff5e7 100%)",
-          }}
-        />
-        <div className="absolute inset-x-5 bottom-4">
-          <Kicker tone="green" wide>
-            Reading now
-          </Kicker>
-          <h1 className="mt-2 text-[34px] font-medium leading-[1.05] tracking-[-0.025em] text-ink">
-            {book.title}
-          </h1>
-          <p className="mt-2 text-[13.5px] text-muted">
-            {book.author}
-            {book.page_count ? (
-              <>
-                {" · "}
-                <Num>{book.page_count}</Num> pp
-              </>
-            ) : null}
+      {book ? (
+        <div className="relative">
+          <Link href={`/book/${book.id}`} className="relative block h-[300px] overflow-hidden">
+            <BookCover book={book} className="h-full w-full" fit="cover" eager />
+            {/* Heavier than the original scrim: the title has to hold against
+                a busy cover, so the lower half resolves to solid ground. */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(180deg,rgba(255,245,231,0) 0%,rgba(255,245,231,.14) 26%,rgba(255,245,231,.62) 52%,rgba(255,245,231,.93) 74%,#fff5e7 88%)",
+              }}
+            />
+            <div className="absolute inset-x-5 bottom-4">
+              <Kicker tone="green">Reading now</Kicker>
+              <h1 className="mt-[6px] text-[34px] font-medium leading-[1.05] tracking-[-0.025em] text-ink">
+                {book.title}
+              </h1>
+              <p className="mt-2 text-[13.5px] text-muted">
+                {book.author}
+                {book.page_count ? (
+                  <>
+                    {" · "}
+                    <Num>{book.page_count}</Num> pp
+                  </>
+                ) : null}
+              </p>
+            </div>
+          </Link>
+
+          {currentMember && (
+            <button
+              onClick={() => setSwapping(true)}
+              aria-label="Change the current book"
+              className="absolute right-5 top-[66px] flex items-center gap-[6px] rounded-full border border-green bg-ground/85 px-3 py-[6px] text-[11px] font-medium text-ink backdrop-blur-sm active:bg-green/10"
+            >
+              <ArrowsLeftRight size={13} />
+              Change
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="px-5 pt-[62px]">
+          <Kicker tone="green">Reading now</Kicker>
+          <p className="mt-[6px] text-[34px] font-medium leading-[1.05] tracking-[-0.025em] text-ink">
+            Nothing on
+            <br />
+            the go
           </p>
-        </div>
-      </Link>
-
-      {/* The ledger */}
-      <section className="px-5 pt-[18px]">
-        <div className="flex items-center justify-between">
-          <Kicker>Where everyone is</Kicker>
-          {revealCount > 0 && (
-            <PillButton onClick={toggleReveal}>
-              {revealed ? "Hide" : "Reveal scores"}
-            </PillButton>
+          {currentMember && (
+            <OutlineButton className="mt-5" onClick={() => setSwapping(true)}>
+              Pick the book
+            </OutlineButton>
           )}
         </div>
+      )}
 
-        <div className="mt-3">
-          {rows.length === 0 && (
-            <p className="py-3 text-[13px] text-muted">No members yet.</p>
-          )}
-          {rows.map((row) => {
-            const { member, status, score, scored, isMe } = row;
-            const mark =
-              scored ? "bg-green" : status === "reading" ? "bg-teal" : "bg-transparent";
-            return (
+      {book && (
+        <section className="px-5 pt-[18px]">
+          <div className="flex items-center justify-between">
+            <Kicker>Where everyone is</Kicker>
+            {othersScored > 0 && (
+              <PillButton onClick={toggleReveal}>{revealed ? "Hide" : "Reveal scores"}</PillButton>
+            )}
+          </div>
+
+          <div className="mt-3">
+            {rows.length === 0 && <p className="py-3 text-[13px] text-muted">No members yet.</p>}
+            {rows.map(({ member, status, score, scored, isMe }) => (
               <div key={member.id} className="row-line flex items-center gap-3 py-[11px]">
-                <span className={cn("w-[2px] self-stretch rounded-sm", mark)} />
+                <span
+                  className={cn(
+                    "w-[2px] self-stretch rounded-sm",
+                    scored ? "bg-green" : status === "reading" ? "bg-teal" : "bg-transparent"
+                  )}
+                />
                 <span
                   className={cn(
                     "text-[14.5px]",
@@ -231,50 +243,36 @@ export default function ReadingScreen() {
                 </span>
                 <span className="flex-1" />
 
-                {scored ? (
-                  // Your own score is a way in to change it; everyone else's
-                  // stays blurred until the club reveals.
-                  isMe ? (
-                    <Link
-                      href={`/book/${book.id}`}
-                      className="flex items-center gap-[5px] text-ink active:opacity-70"
+                {isMe ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPickingStatus(true)}
+                      className="flex items-center gap-[6px] rounded-lg border border-tan px-[10px] py-[5px] text-[11.5px] text-ink active:bg-tan/40"
                     >
-                      <Num className="text-[17px] font-semibold">{score!.toFixed(1)}</Num>
-                      <PencilSimple size={13} className="text-green" />
-                    </Link>
-                  ) : (
-                    <Num
-                      className={cn(
-                        "text-[17px] font-semibold text-ink",
-                        revealed ? "score-reveal" : "score-blur"
-                      )}
-                    >
-                      {score!.toFixed(1)}
-                    </Num>
-                  )
-                ) : isMe ? (
-                  // The control is the value itself: a picker you tap to move
-                  // yourself along, rather than a label with a hint beside it.
-                  <button
-                    onClick={cycleOwnStatus}
-                    className="flex items-center gap-[6px] rounded-lg border border-tan px-[10px] py-[5px] text-[11px] uppercase tracking-[0.1em] text-ink transition-colors active:bg-tan/40"
-                    aria-label={`Your status: ${STATUS_LABEL[status as Exclude<ProgressStatus, "finished">]}. Tap to change.`}
-                  >
-                    {STATUS_LABEL[status as Exclude<ProgressStatus, "finished">]}
-                    <CaretUpDown size={13} className="text-green" />
-                  </button>
+                      {STATUS_LABEL[status]}
+                      <CaretUpDown size={12} className="text-green" />
+                    </button>
+                    {scored && (
+                      <Link
+                        href={`/book/${book.id}`}
+                        className="flex items-center gap-[4px] active:opacity-70"
+                      >
+                        <Score value={score} />
+                        <PencilSimple size={12} className="text-green" />
+                      </Link>
+                    )}
+                  </div>
+                ) : scored ? (
+                  <Score value={score} blurred={!revealed} />
                 ) : (
-                  <span className="text-[11px] uppercase tracking-[0.1em] text-muted">
-                    {STATUS_LABEL[status as Exclude<ProgressStatus, "finished">]}
-                  </span>
+                  <span className="text-[11.5px] text-muted">{STATUS_LABEL[status]}</span>
                 )}
               </div>
-            );
-          })}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
-      {/* Next meeting */}
       {meeting && (
         <section className="flex items-end justify-between gap-4 px-5 pt-6">
           <div>
@@ -302,6 +300,57 @@ export default function ReadingScreen() {
           </Link>
         </section>
       )}
+
+      {pickingStatus && currentMember && book && (
+        <StatusPicker current={myStatus} onPick={setStatus} onClose={() => setPickingStatus(false)} />
+      )}
+
+      {swapping && currentMember && (
+        <Sheet title="What are we reading?" onClose={() => setSwapping(false)}>
+          {upNext.length > 0 ? (
+            upNext.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => startReading(b.id)}
+                className="row-line flex w-full items-center gap-3 py-[11px] text-left"
+              >
+                <div
+                  className="h-[46px] w-[31px] flex-none overflow-hidden rounded-sm"
+                  style={{ background: spineColor(b.title) }}
+                >
+                  <BookCover book={b} className="h-full w-full" fit="cover" />
+                </div>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14.5px] text-ink">{b.title}</span>
+                  <span className="block truncate text-[12px] text-muted">{b.author}</span>
+                </span>
+              </button>
+            ))
+          ) : (
+            <p className="py-4 text-[13px] text-muted">Nothing lined up yet.</p>
+          )}
+          <OutlineButton
+            className="mt-4 w-full"
+            onClick={() => {
+              setSwapping(false);
+              setSearching(true);
+            }}
+          >
+            Find a book
+          </OutlineButton>
+        </Sheet>
+      )}
+
+      {searching && currentMember && (
+        <BookSearch
+          memberId={currentMember.id}
+          onBookAdded={async (added) => {
+            setSearching(false);
+            await startReading(added.id);
+          }}
+          onClose={() => setSearching(false)}
+        />
+      )}
     </div>
   );
 }
@@ -309,6 +358,5 @@ export default function ReadingScreen() {
 function formatClock(time: string): string {
   const [h, m] = time.split(":");
   const hour = parseInt(h, 10);
-  const ampm = hour >= 12 ? "PM" : "AM";
-  return `${hour % 12 || 12}:${m} ${ampm}`;
+  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
 }

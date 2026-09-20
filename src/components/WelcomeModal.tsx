@@ -34,7 +34,7 @@ export default function WelcomeModal({ onSelect }: { onSelect: (m: Member) => vo
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/25 backdrop-blur-sm sm:items-center">
       <div className="w-full max-w-[448px] rounded-t-[26px] bg-ground p-5 pb-8 sm:rounded-[26px]">
-        <Kicker tone="green" wide>
+        <Kicker tone="green">
           The Clerb
         </Kicker>
         <p className="mt-2 text-[24px] font-medium leading-none tracking-[-0.02em] text-ink">

@@ -56,6 +56,25 @@ export interface BookComment {
   member?: Member;
 }
 
+export interface BookQuote {
+  id: string;
+  book_id: string;
+  member_id: string;
+  content: string;
+  page: string | null;
+  created_at: string;
+  member?: Member;
+}
+
+export interface MeetingOrder {
+  id: string;
+  meeting_id: string;
+  member_id: string;
+  item: string;
+  created_at: string;
+  member?: Member;
+}
+
 export interface DiscussionTopic {
   id: string;
   book_id: string;
@@ -76,6 +95,8 @@ export interface Meeting {
   time: string;
   location: string | null;
   notes: string | null;
+  /** Shared basket link once somebody has started the group order. */
+  order_url: string | null;
   created_at: string;
   book?: Book;
 }
