@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { Camera } from "@phosphor-icons/react";
 import { BookQuote } from "@/types";
 import { DeleteButton, Kicker, Num, OutlineButton, SolidButton } from "./ui";
+import QuoteCapture from "./QuoteCapture";
 import { cn } from "@/lib/utils";
 
-/** Lines worth keeping. Set as a pull quote, with an optional page number. */
+/** Lines worth keeping — typed, or photographed and read off the page. */
 export default function Quotes({
   quotes,
   memberId,
@@ -20,10 +22,11 @@ export default function Quotes({
   const [draft, setDraft] = useState("");
   const [page, setPage] = useState("");
   const [adding, setAdding] = useState(false);
+  const [capturing, setCapturing] = useState(false);
 
   return (
     <div>
-      <Kicker>Favourite lines</Kicker>
+      <Kicker>Favourite Lines</Kicker>
 
       {quotes.length === 0 && !adding && (
         <p className="py-4 text-[12.5px] text-muted">Nothing marked yet.</p>
@@ -35,9 +38,7 @@ export default function Quotes({
           className={cn("flex items-start gap-2 py-[14px]", i < quotes.length - 1 && "row-line")}
         >
           <div className="min-w-0 flex-1 border-l-2 border-green pl-[14px]">
-            <p className="text-[14px] italic leading-[1.55] text-ink">
-              &ldquo;{q.content}&rdquo;
-            </p>
+            <p className="text-[14px] italic leading-[1.55] text-ink">&ldquo;{q.content}&rdquo;</p>
             <p className="mt-[6px] text-[11.5px] text-muted">
               {q.page && (
                 <>
@@ -56,9 +57,16 @@ export default function Quotes({
 
       {memberId &&
         (!adding ? (
-          <OutlineButton className="mt-3" onClick={() => setAdding(true)}>
-            Add a line
-          </OutlineButton>
+          <div className="mt-3 flex gap-2">
+            <OutlineButton
+              className="flex flex-1 items-center justify-center gap-2"
+              onClick={() => setCapturing(true)}
+            >
+              <Camera size={15} />
+              Photograph A Line
+            </OutlineButton>
+            <OutlineButton onClick={() => setAdding(true)}>Type It</OutlineButton>
+          </div>
         ) : (
           <div className="mt-3 space-y-2">
             <textarea
@@ -102,6 +110,10 @@ export default function Quotes({
             </div>
           </div>
         ))}
+
+      {capturing && (
+        <QuoteCapture onSave={(c, p) => onAdd(c, p)} onClose={() => setCapturing(false)} />
+      )}
     </div>
   );
 }

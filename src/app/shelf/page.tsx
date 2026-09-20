@@ -10,15 +10,15 @@ import BookSearch from "@/components/BookSearch";
 import BookCover from "@/components/BookCover";
 import ShelfWheel from "@/components/ShelfWheel";
 import { Kicker, Num, OutlineButton, Rule, Score, ScreenTitle, Sheet } from "@/components/ui";
-import { markCompleted } from "@/lib/books";
-import { leather, scoreColor, shortMonthYear } from "@/lib/design";
+import { syncBookStatuses } from "@/lib/books";
+import { extractSpineColor, isDerived, leather, scoreColor, shortMonthYear } from "@/lib/design";
 import { cn } from "@/lib/utils";
 
 const SORTS = [
-  "Score · high to low",
-  "Score · low to high",
+  "Score · High To Low",
+  "Score · Low To High",
   "Title A–Z",
-  "Recently read",
+  "Recently Read",
 ] as const;
 type Sort = (typeof SORTS)[number];
 
@@ -26,19 +26,23 @@ interface ShelfBook extends Book {
   avg: number | null;
 }
 
+/** A hairline instead of a dot between facts. */
+function Sep() {
+  return <span className="mx-[9px] inline-block h-[10px] w-px translate-y-[1px] bg-tan" />;
+}
+
 export default function ShelfScreen() {
   const router = useRouter();
   const { currentMember, members } = useMember();
   const [shelf, setShelf] = useState<ShelfBook[]>([]);
   const [upNext, setUpNext] = useState<Book[]>([]);
-  const [scores, setScores] = useState<Record<string, Record<string, number>>>({}); // member -> book -> score
-  const [progress, setProgress] = useState<Record<string, Record<string, ProgressStatus>>>({}); // member -> book -> status
+  const [scores, setScores] = useState<Record<string, Record<string, number>>>({});
+  const [progress, setProgress] = useState<Record<string, Record<string, ProgressStatus>>>({});
   const [sort, setSort] = useState<Sort>(SORTS[0]);
   const [selected, setSelected] = useState(0);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [starting, setStarting] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -75,20 +79,47 @@ export default function ShelfScreen() {
     setScores(byMember);
     setProgress(byProgress);
     setLoading(false);
+    return all;
   }, []);
 
   useEffect(() => {
-    load();
+    (async () => {
+      // Status follows the calendar; correct it before drawing the shelf.
+      if (await syncBookStatuses()) await load();
+      else await load();
+    })();
   }, [load]);
+
+  // Give each book its own binding colour, taken from its cover art. Runs
+  // once per book: a derived colour is never one of the fallback leathers.
+  useEffect(() => {
+    if (loading) return;
+    let cancelled = false;
+    (async () => {
+      const pending = [...shelf, ...upNext].filter((b) => !isDerived(b.spine_color));
+      for (const b of pending) {
+        if (cancelled) return;
+        const hex = await extractSpineColor(b);
+        if (!hex || cancelled) continue;
+        await supabase.from("books").update({ spine_color: hex }).eq("id", b.id);
+        setShelf((prev) => prev.map((x) => (x.id === b.id ? { ...x, spine_color: hex } : x)));
+        setUpNext((prev) => prev.map((x) => (x.id === b.id ? { ...x, spine_color: hex } : x)));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const sorted = useMemo(() => {
     const copy = shelf.slice();
     switch (sort) {
-      case "Score · low to high":
+      case "Score · Low To High":
         return copy.sort((a, b) => (a.avg ?? 99) - (b.avg ?? 99));
       case "Title A–Z":
         return copy.sort((a, b) => a.title.localeCompare(b.title));
-      case "Recently read":
+      case "Recently Read":
         return copy.sort(
           (a, b) =>
             new Date(b.completed_at ?? b.created_at).getTime() -
@@ -101,21 +132,11 @@ export default function ShelfScreen() {
 
   const sel = sorted[Math.min(selected, sorted.length - 1)] ?? null;
 
-  async function startReading(bookId: string) {
-    setStarting(bookId);
-    const reading = [...shelf, ...upNext].find((b) => b.status === "reading");
-    if (reading) await markCompleted(reading.id);
-    await supabase.from("books").update({ status: "reading" }).eq("id", bookId);
-    setStarting(null);
-    router.push("/");
-  }
-
-  /** How one member stands on the book currently in the frame. */
   function standing(memberId: string, bookId: string) {
     const score = scores[memberId]?.[bookId] ?? null;
     const status = progress[memberId]?.[bookId] ?? (score !== null ? "finished" : "none");
     const label =
-      status === "dnf" ? "DNF" : status === "finished" || score !== null ? "Read" : "Didn't read";
+      status === "dnf" ? "DNF" : status === "finished" || score !== null ? "Read" : "Didn't Read";
     return { score, status, label };
   }
 
@@ -124,7 +145,7 @@ export default function ShelfScreen() {
       <div className="flex items-baseline justify-between px-5 pb-1">
         <ScreenTitle>Shelf</ScreenTitle>
         <span className="text-[11.5px] text-muted">
-          <Num>{shelf.length}</Num> books read
+          <Num>{shelf.length}</Num> Books Read
         </span>
       </div>
 
@@ -161,9 +182,7 @@ export default function ShelfScreen() {
       {loading ? (
         <div className="mx-5 mt-[22px] h-[156px] animate-pulse rounded bg-tan/40" />
       ) : sorted.length === 0 ? (
-        <p className="px-5 pt-6 text-[13px] leading-relaxed text-muted">
-          No finished books yet.
-        </p>
+        <p className="px-5 pt-6 text-[13px] leading-relaxed text-muted">No finished books yet.</p>
       ) : (
         <div className="mt-[22px]">
           <ShelfWheel books={sorted} selected={selected} onSelect={setSelected} />
@@ -172,18 +191,23 @@ export default function ShelfScreen() {
 
       {sel && (
         <button
-          onClick={() => router.push(`/book/${sel.id}`)}
+          onClick={() => router.push(`/book/${sel.id}?view=club`)}
           className="row-line mt-4 flex w-full items-center gap-3 px-5 pb-4 text-left active:bg-tan/20"
         >
           <div className="min-w-0 flex-1">
             <p className="text-[22px] font-medium leading-[1.15] tracking-[-0.02em] text-ink">
               {sel.title}
             </p>
-            <p className="mt-[5px] text-[13px] text-muted">
-              {sel.author}
-              {shortMonthYear(sel.completed_at) ? ` · read ${shortMonthYear(sel.completed_at)}` : ""}
+            <p className="mt-[5px] flex items-center text-[13px] text-muted">
+              <span className="truncate">{sel.author}</span>
+              {shortMonthYear(sel.completed_at) && (
+                <>
+                  <Sep />
+                  <span className="flex-none">Read {shortMonthYear(sel.completed_at)}</span>
+                </>
+              )}
             </p>
-            <p className="mt-[7px] text-[11.5px] text-green">Reviews, quotes &amp; discussion</p>
+            <p className="mt-[7px] text-[11.5px] text-green">Reviews, Quotes &amp; Discussion</p>
           </div>
           <CaretRight size={18} className="flex-none text-green" />
         </button>
@@ -191,30 +215,34 @@ export default function ShelfScreen() {
 
       {upNext.length > 0 && (
         <section className="px-5 pt-5">
-          <Kicker>Up next</Kicker>
+          <div className="flex items-baseline justify-between">
+            <Kicker>Up Next</Kicker>
+            <button
+              onClick={() => router.push("/calendar")}
+              className="text-[11px] text-green"
+            >
+              Schedule One
+            </button>
+          </div>
           <div className="mt-2">
             {upNext.map((b) => (
-              <div key={b.id} className="row-line flex items-center gap-3 py-[11px]">
+              <button
+                key={b.id}
+                onClick={() => router.push(`/book/${b.id}?view=club`)}
+                className="row-line flex w-full items-center gap-3 py-[11px] text-left"
+              >
                 <div
                   className="h-[46px] w-[31px] flex-none overflow-hidden rounded-sm"
-                  style={{ background: leather(b.title).hex }}
+                  style={{ background: b.spine_color || leather(b.title).hex }}
                 >
                   <BookCover book={b} className="h-full w-full" fit="cover" />
                 </div>
-                <button onClick={() => router.push(`/book/${b.id}`)} className="min-w-0 flex-1 text-left">
-                  <p className="truncate text-[14.5px] text-ink">{b.title}</p>
-                  <p className="truncate text-[12px] text-muted">{b.author}</p>
-                </button>
-                {currentMember && (
-                  <OutlineButton
-                    className="flex-none px-3 py-[6px] text-[12px]"
-                    disabled={starting === b.id}
-                    onClick={() => startReading(b.id)}
-                  >
-                    {starting === b.id ? "Starting…" : "Start reading"}
-                  </OutlineButton>
-                )}
-              </div>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14.5px] text-ink">{b.title}</span>
+                  <span className="block truncate text-[12px] text-muted">{b.author}</span>
+                </span>
+                <CaretRight size={14} className="flex-none text-muted/50" />
+              </button>
             ))}
           </div>
         </section>
@@ -224,11 +252,10 @@ export default function ShelfScreen() {
         <Rule />
       </div>
 
-      {/* Members, against whatever book is in the frame. */}
       <section className="px-5 pt-[18px]">
         <div className="flex items-baseline justify-between">
           <Kicker>Members</Kicker>
-          {sel && <span className="text-[11px] text-muted">on {sel.title}</span>}
+          {sel && <span className="truncate pl-3 text-[11px] text-muted">On {sel.title}</span>}
         </div>
 
         <div className="mt-[10px]">
@@ -251,8 +278,8 @@ export default function ShelfScreen() {
                   {stand && (
                     <span
                       className={cn(
-                        "text-[11.5px]",
-                        stand.status === "dnf" ? "text-muted line-through" : "text-muted"
+                        "text-[11.5px] text-muted",
+                        stand.status === "dnf" && "line-through"
                       )}
                     >
                       {stand.label}
@@ -271,11 +298,11 @@ export default function ShelfScreen() {
                 {open && (
                   <div className="pop-in pb-3">
                     <p className="pb-2 text-[11.5px] text-muted">
-                      <Num>{all.length}</Num> scored · average{" "}
-                      <Num style={undefined}>
-                        <span style={{ color: scoreColor(avg) }}>
-                          {avg !== null ? avg.toFixed(1) : "—"}
-                        </span>
+                      <Num>{all.length}</Num> Scored
+                      <Sep />
+                      Average{" "}
+                      <Num style={{ color: scoreColor(avg) }}>
+                        {avg !== null ? avg.toFixed(1) : "—"}
                       </Num>
                     </p>
                     <div className="scrollbar-hide max-h-[200px] overflow-y-auto overscroll-contain rounded-lg bg-tan/20 px-3">
@@ -285,7 +312,7 @@ export default function ShelfScreen() {
                         .map((b, i, arr) => (
                           <button
                             key={b.id}
-                            onClick={() => router.push(`/book/${b.id}`)}
+                            onClick={() => router.push(`/book/${b.id}?view=club`)}
                             className={cn(
                               "flex w-full items-center gap-3 py-[9px] text-left",
                               i < arr.length - 1 && "row-line"
@@ -310,21 +337,21 @@ export default function ShelfScreen() {
       </section>
 
       {showAll && (
-        <Sheet title="Every book" onClose={() => setShowAll(false)} full>
+        <Sheet title="Every Book" onClose={() => setShowAll(false)} full>
           <div className="grid grid-cols-3 gap-x-4 gap-y-5 pt-1">
             {sorted.map((b) => (
               <button
                 key={b.id}
                 onClick={() => {
                   setShowAll(false);
-                  router.push(`/book/${b.id}`);
+                  router.push(`/book/${b.id}?view=club`);
                 }}
                 className="text-left"
               >
                 <div
                   className="relative aspect-[2/3] w-full overflow-hidden rounded-sm"
                   style={{
-                    background: leather(b.title).hex,
+                    background: b.spine_color || leather(b.title).hex,
                     boxShadow: "0 6px 14px rgba(28,17,8,.22)",
                   }}
                 >
@@ -342,9 +369,7 @@ export default function ShelfScreen() {
               </button>
             ))}
           </div>
-          {sorted.length === 0 && (
-            <p className="py-6 text-[13px] text-muted">No finished books yet.</p>
-          )}
+          {sorted.length === 0 && <p className="py-6 text-[13px] text-muted">No finished books yet.</p>}
         </Sheet>
       )}
 

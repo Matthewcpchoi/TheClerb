@@ -197,14 +197,14 @@ export default function MeetScreen() {
               setShowForm(true);
             }}
           >
-            New meeting
+            New Meeting
           </OutlineButton>
         )}
       </div>
 
       {showForm && (
         <div className="mt-5 space-y-3 rounded-lg border border-tan p-4">
-          <Kicker tone="green">New meeting</Kicker>
+          <Kicker tone="green">New Meeting</Kicker>
 
           <Labelled label="Book">
             <select
@@ -221,7 +221,7 @@ export default function MeetScreen() {
             </select>
           </Labelled>
 
-          <Labelled label="Who's hosting">
+          <Labelled label="Who's Hosting">
             <select
               value={form.host_id}
               onChange={(e) => setForm({ ...form, host_id: e.target.value })}
@@ -268,7 +268,7 @@ export default function MeetScreen() {
             </div>
           </div>
 
-          <Labelled label="How far are we reading">
+          <Labelled label="How Far Are We Reading">
             <input
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -284,7 +284,7 @@ export default function MeetScreen() {
               Cancel
             </OutlineButton>
             <SolidButton className="flex-1" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Add meeting"}
+              {saving ? "Saving…" : "Add Meeting"}
             </SolidButton>
           </div>
         </div>
@@ -298,7 +298,7 @@ export default function MeetScreen() {
         )
       ) : (
         <div className="mt-6">
-          <Kicker tone="green">Next up</Kicker>
+          <Kicker tone="green">Next Up</Kicker>
           <button
             onClick={() => setOpenMeeting(next.id)}
             className="mt-[10px] flex w-full items-baseline gap-3 text-left"
@@ -379,7 +379,7 @@ export default function MeetScreen() {
       </div>
 
       <section className="mt-5">
-        <Kicker>Penciled in</Kicker>
+        <Kicker>Penciled In</Kicker>
         {later.length === 0 ? (
           <p className="py-4 text-[12.5px] text-muted">Nothing further out yet.</p>
         ) : (
@@ -516,7 +516,7 @@ function MeetingSheet({
             ["Going", buckets.going],
             ["Maybe", buckets.maybe],
             ["Can't", buckets.not_going],
-            ["Yet to answer", buckets.silent],
+            ["Yet To Answer", buckets.silent],
           ] as const
         ).map(([label, list]) =>
           list.length ? (
@@ -533,7 +533,7 @@ function MeetingSheet({
       </div>
 
       {/* Food. The app collects the order; the basket itself lives on Uber Eats. */}
-      <Kicker>Group order</Kicker>
+      <Kicker>Group Order</Kicker>
       <div className="mt-2">
         {orders.length === 0 && <p className="py-2 text-[12.5px] text-muted">Nothing yet.</p>}
         {orders.map((o, i) => (
@@ -579,7 +579,7 @@ function MeetingSheet({
           rel="noopener noreferrer"
           className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-ink py-[11px] text-[13px] font-medium text-ground"
         >
-          Join the order
+          Join The Order
           <ArrowSquareOut size={14} />
         </a>
       ) : (
@@ -591,7 +591,7 @@ function MeetingSheet({
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 rounded-lg border border-green py-[10px] text-[13px] font-medium text-ink"
             >
-              Start it on Uber Eats
+              Start It On Uber Eats
               <ArrowSquareOut size={14} />
             </a>
             <div className="flex gap-2">
@@ -611,7 +611,7 @@ function MeetingSheet({
 
       {currentMember && (
         <button onClick={onDelete} className="mt-6 w-full py-2 text-[12px] text-muted/70">
-          Delete this meeting
+          Delete This Meeting
         </button>
       )}
     </Sheet>

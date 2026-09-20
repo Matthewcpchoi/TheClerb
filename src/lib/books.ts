@@ -68,3 +68,57 @@ export async function healUnresolvedCovers(books: Book[]): Promise<boolean> {
 
   return changed;
 }
+
+/**
+ * Keep book status in step with the calendar.
+ *
+ * The club reads whatever the next meeting is about, and that holds until the
+ * meeting's date passes. Rather than asking anyone to flip a status by hand,
+ * derive it: the next meeting's book is being read, and any book whose meeting
+ * has already happened is finished.
+ *
+ * Returns true if anything changed, so the caller can refetch.
+ */
+export async function syncBookStatuses(): Promise<boolean> {
+  const today = new Date().toISOString().split("T")[0];
+
+  const [{ data: upcoming }, { data: past }, { data: books }] = await Promise.all([
+    supabase
+      .from("meetings")
+      .select("book_id, date")
+      .gte("date", today)
+      .order("date", { ascending: true })
+      .order("time", { ascending: true })
+      .limit(1),
+    supabase.from("meetings").select("book_id").lt("date", today),
+    supabase.from("books").select("id, status, completed_at"),
+  ]);
+
+  const currentId = upcoming?.[0]?.book_id ?? null;
+  const finishedIds = new Set(
+    (past || []).map((m) => m.book_id).filter((id): id is string => Boolean(id))
+  );
+  finishedIds.delete(currentId ?? "");
+
+  let changed = false;
+
+  for (const b of (books || []) as { id: string; status: string; completed_at: string | null }[]) {
+    if (b.id === currentId) {
+      if (b.status !== "reading") {
+        await supabase.from("books").update({ status: "reading" }).eq("id", b.id);
+        changed = true;
+      }
+    } else if (finishedIds.has(b.id)) {
+      if (b.status !== "completed") {
+        await markCompleted(b.id);
+        changed = true;
+      }
+    } else if (b.status === "reading") {
+      // Was the current read, but no longer sits on any upcoming meeting.
+      await markCompleted(b.id);
+      changed = true;
+    }
+  }
+
+  return changed;
+}

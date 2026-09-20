@@ -92,3 +92,126 @@ export function shortMonthYear(iso: string | null): string | null {
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
+
+/* ------------------------------------------------- Colour from the cover */
+
+const LEATHER_HEXES = new Set(LEATHERS.map((l) => l.hex));
+
+/** A stored spine colour that isn't one of our fallbacks came from the art. */
+export function isDerived(spine: string | null | undefined): boolean {
+  return Boolean(spine && !LEATHER_HEXES.has(spine));
+}
+
+function toHex(r: number, g: number, b: number): string {
+  return "#" + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+}
+
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+/** Foil on a dark binding, ink on a pale one. */
+export function textOn(hex: string): string {
+  return luminance(hex) > 0.62 ? "#2b2118" : "#e9d5a6";
+}
+
+/**
+ * Pull a binding colour out of the actual cover art.
+ *
+ * This only works because covers are served through our own /api/cover route:
+ * a same-origin image leaves the canvas untainted, where reading pixels
+ * straight from a provider's CDN throws.
+ */
+export function extractSpineColor(book: {
+  cover_url?: string | null;
+  thumbnail_url?: string | null;
+  isbn?: string | null;
+  google_books_id?: string | null;
+  title?: string | null;
+  author?: string | null;
+}): Promise<string | null> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(null);
+
+    const params = new URLSearchParams();
+    if (book.google_books_id) params.set("gid", book.google_books_id);
+    if (book.isbn) params.set("isbn", book.isbn);
+    if (book.title) params.set("title", book.title);
+    if (book.author) params.set("author", book.author);
+    if (!params.toString()) return resolve(null);
+
+    const img = new Image();
+    const timer = setTimeout(() => resolve(null), 8000);
+
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(null);
+    };
+
+    img.onload = () => {
+      clearTimeout(timer);
+      try {
+        const W = 28;
+        const H = 42;
+        const canvas = document.createElement("canvas");
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return resolve(null);
+        ctx.drawImage(img, 0, 0, W, H);
+        const { data } = ctx.getImageData(0, 0, W, H);
+
+        // Bucket into coarse bins, then favour the bin that is both common
+        // and colourful — an average would just return mud.
+        const bins = new Map<string, { r: number; g: number; b: number; n: number }>();
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          if (data[i + 3] < 200) continue;
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          if (max > 242 && min > 232) continue; // paper white
+          if (max < 18) continue; // pure black
+          const key = `${r >> 5}-${g >> 5}-${b >> 5}`;
+          const bin = bins.get(key) || { r: 0, g: 0, b: 0, n: 0 };
+          bin.r += r;
+          bin.g += g;
+          bin.b += b;
+          bin.n += 1;
+          bins.set(key, bin);
+        }
+        if (bins.size === 0) return resolve(null);
+
+        let best: { r: number; g: number; b: number } | null = null;
+        let bestScore = -1;
+        bins.forEach((bin) => {
+          const r = bin.r / bin.n;
+          const g = bin.g / bin.n;
+          const b = bin.b / bin.n;
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const sat = max === 0 ? 0 : (max - min) / max;
+          const score = bin.n * (0.35 + sat);
+          if (score > bestScore) {
+            bestScore = score;
+            best = { r, g, b };
+          }
+        });
+        if (!best) return resolve(null);
+
+        // Deepen it to binding weight so stamped titles stay legible.
+        const { r, g, b } = best as { r: number; g: number; b: number };
+        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        const k = lum > 0.55 ? 0.62 : lum > 0.35 ? 0.82 : 1;
+        resolve(toHex(r * k, g * k, b * k));
+      } catch {
+        resolve(null);
+      }
+    };
+
+    img.src = `/api/cover?${params.toString()}`;
+  });
+}

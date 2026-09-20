@@ -1,6 +1,8 @@
 export interface Member {
   id: string;
   name: string;
+  /** Club organiser: manages members and can switch the active profile. */
+  is_admin?: boolean;
   created_at: string;
 }
 
@@ -80,6 +82,7 @@ export interface DiscussionTopic {
   book_id: string;
   member_id: string | null;
   content: string;
+  page: string | null;
   is_spoiler: boolean;
   created_at: string;
   member?: Member;
